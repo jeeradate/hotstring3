@@ -1,0 +1,53 @@
+[project]
+name = "hotstring"
+version = "1.0.0"
+description = "A Windows text expander and command launcher: type a short trigger, run a command."
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [
+    { name = "jeeradate", email = "jeeradate@gmail.com" }
+]
+requires-python = ">=3.11"
+keywords = ["windows", "text-expander", "hotstring", "keyboard", "automation", "tray"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Win32 (MS Windows)",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: Microsoft :: Windows :: Windows 10",
+    "Operating System :: Microsoft :: Windows :: Windows 11",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "nicegui[native]>=4.0.0",
+    "pillow>=13.0.0",
+    "pynput>=1.8.2",
+    "pystray>=0.19.5",
+    "sqlmodel>=0.0.50",
+]
+
+[project.urls]
+Homepage = "https://github.com/jeeradate/hotstring"
+Repository = "https://github.com/jeeradate/hotstring"
+Issues = "https://github.com/jeeradate/hotstring/issues"
+
+[project.scripts]
+hotstring = "hotstring.__main__:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[build-system]
+requires = ["uv_build>=0.12.23,<0.13.0"]
+build-backend = "uv_build"
