@@ -9,14 +9,15 @@ from pathlib import Path
 log = logging.getLogger(__name__)
 
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
-VALUE_NAME = "HotString"
+VALUE_NAME = "HotString3"
+LEGACY_VALUE_NAME = "HotString"
 
 
 def build_launch_command() -> str:
     """Build the command stored in the ``Run`` registry value.
 
     ``pythonw.exe`` is preferred so no console window appears at login.  When
-    HotString is packaged as a frozen executable its own path is used.
+    HotString3 is packaged as a frozen executable its own path is used.
     """
     if getattr(sys, "frozen", False):
         return f'"{Path(sys.executable)}"'
@@ -24,11 +25,57 @@ def build_launch_command() -> str:
     executable = Path(sys.executable)
     pythonw = executable.with_name("pythonw.exe")
     interpreter = pythonw if pythonw.exists() else executable
-    return f'"{interpreter}" -m hotstring'
+    return f'"{interpreter}" -m hotstring3'
+
+
+def _read_value(name: str) -> str | None:
+    """Return a ``Run`` value, or ``None`` when it is absent."""
+    try:
+        import winreg
+    except ImportError:  # pragma: no cover - not on Windows
+        return None
+
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as key:
+            value, _kind = winreg.QueryValueEx(key, name)
+        return str(value)
+    except (FileNotFoundError, OSError):
+        return None
+
+
+def _delete_value(name: str) -> None:
+    """Delete one ``Run`` value, ignoring a missing value or key."""
+    try:
+        import winreg
+    except ImportError:  # pragma: no cover - not on Windows
+        return
+
+    try:
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_SET_VALUE
+        ) as key:
+            winreg.DeleteValue(key, name)
+    except (FileNotFoundError, OSError):
+        pass
+
+
+def migrate_legacy_entry() -> None:
+    """Move the pre-rename ``HotString`` startup entry to ``HotString3``.
+
+    The old value launches ``-m hotstring`` which no longer exists, so keeping
+    it would make Windows fail to start the app at login.
+    """
+    if _read_value(LEGACY_VALUE_NAME) is None:
+        return
+
+    if not is_enabled():
+        enable()
+    _delete_value(LEGACY_VALUE_NAME)
+    log.info("Migrated the legacy start-with-Windows entry")
 
 
 def is_enabled() -> bool:
-    """Return whether HotString is registered to start with Windows."""
+    """Return whether HotString3 is registered to start with Windows."""
     try:
         import winreg
     except ImportError:  # pragma: no cover - not on Windows
@@ -46,7 +93,7 @@ def is_enabled() -> bool:
 
 
 def enable() -> bool:
-    """Register HotString in the current user's ``Run`` key."""
+    """Register HotString3 in the current user's ``Run`` key."""
     try:
         import winreg
     except ImportError:  # pragma: no cover - not on Windows
@@ -67,7 +114,7 @@ def enable() -> bool:
 
 
 def disable() -> bool:
-    """Remove HotString from the current user's ``Run`` key."""
+    """Remove HotString3 from the current user's ``Run`` key."""
     try:
         import winreg
     except ImportError:  # pragma: no cover - not on Windows

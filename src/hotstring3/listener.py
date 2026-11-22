@@ -15,10 +15,34 @@ from typing import Any, Callable, Iterable
 
 from . import config
 from .executor import is_input_suppressed, send_backspaces
+from .suggestions import SuggestionIndex, SuggestionState, TriggerSuggestion
 
 log = logging.getLogger(__name__)
 
 _IS_WINDOWS = sys.platform == "win32"
+
+#: Virtual-key codes of the shortcut modifiers: Ctrl, Alt and the Windows keys.
+_SHORTCUT_VK = (0x11, 0x12, 0x5B, 0x5C)
+
+
+def _shortcut_modifier_down() -> bool:
+    """Return whether Ctrl, Alt or a Windows key is physically held down.
+
+    The listener ignores characters typed while a shortcut modifier is down
+    (``Ctrl+C`` is not text).  Windows can swallow the matching key release --
+    when the session is locked, during a UAC prompt or when the hook is
+    temporarily removed -- and the tracked modifier state would then block every
+    later keystroke.  Checking the real key state lets that recover on the next
+    key press.  Shift is deliberately not a shortcut modifier: it changes the
+    typed character, so ``;EM`` must still be recorded as uppercase text.
+    """
+    if not _IS_WINDOWS:
+        return True
+    try:
+        user32 = ctypes.windll.user32
+        return any(bool(user32.GetAsyncKeyState(vk) & 0x8000) for vk in _SHORTCUT_VK)
+    except Exception:  # noqa: BLE001 - never break the hook on a probe failure
+        return True
 
 
 class TriggerBuffer:
@@ -81,7 +105,7 @@ def _key_names(*names: str) -> set[Any]:
 
 
 class KeyboardListener:
-    """Listen globally for HotString triggers and erase them before execution.
+    """Listen globally for HotString3 triggers and erase them before execution.
 
     Args:
         on_match: Called with ``(trigger, command)`` after the trigger has been
@@ -96,12 +120,15 @@ class KeyboardListener:
         on_match: Callable[[str, str], None],
         *,
         on_error: Callable[[str], None] | None = None,
+        on_suggestions: Callable[[SuggestionState | None], None] | None = None,
         buffer: TriggerBuffer | None = None,
     ) -> None:
         self.buffer = buffer if buffer is not None else TriggerBuffer()
         self._on_match = on_match
         self._on_error = on_error
+        self._on_suggestions = on_suggestions
         self._commands: dict[str, str] = {}
+        self._suggestions = SuggestionIndex()
         self._lock = threading.RLock()
         self._paused = False
         self._stop = threading.Event()
@@ -109,22 +136,47 @@ class KeyboardListener:
         self._mouse_listener: Any = None
         self._focus_thread: threading.Thread | None = None
         self._modifiers: set[Any] = set()
-        self._reset_keys: set[Any] = set()
-        self._modifier_keys: set[Any] = set()
+        self._modifier_keys = _key_names(
+            "ctrl", "ctrl_l", "ctrl_r", "alt", "alt_l", "alt_r", "alt_gr", "cmd", "cmd_l", "cmd_r"
+        )
+        self._reset_keys = _key_names(
+            "enter", "esc", "tab", "up", "down", "left", "right",
+            "home", "end", "page_up", "page_down",
+        )
         self._last_window: int | None = None
 
     # -- configuration ------------------------------------------------------
-    def reload(self, commands: dict[str, str]) -> None:
-        """Replace the trigger table.  Takes effect on the next keystroke."""
+    def reload(
+        self,
+        commands: dict[str, str],
+        suggestions: Iterable[TriggerSuggestion] | None = None,
+    ) -> None:
+        """Replace the trigger table and suggestion index.
+
+        Args:
+            commands: ``trigger -> command`` mapping used for execution.
+            suggestions: Display data for the popup.  Defaults to the triggers
+                in ``commands`` with empty descriptions.
+        """
+        if suggestions is None:
+            suggestions = [
+                TriggerSuggestion(trigger=trigger, command=command)
+                for trigger, command in commands.items()
+            ]
         with self._lock:
             self._commands = dict(commands)
+            self._suggestions = SuggestionIndex(suggestions)
         log.debug("Loaded %d trigger(s)", len(commands))
+        self._notify_suggestions()
 
     def set_paused(self, paused: bool) -> None:
         """Pause or resume matching (the keyboard hook stays installed)."""
         self._paused = paused
         if paused:
             self.buffer.clear()
+            self._hide_suggestions()
+        else:
+            self._notify_suggestions()
 
     @property
     def paused(self) -> bool:
@@ -144,14 +196,6 @@ class KeyboardListener:
             log.error(message)
             self._report_error(message)
             return
-
-        self._modifier_keys = _key_names(
-            "ctrl", "ctrl_l", "ctrl_r", "alt", "alt_l", "alt_r", "alt_gr", "cmd", "cmd_l", "cmd_r",
-        )
-        self._reset_keys = _key_names(
-            "enter", "esc", "tab", "up", "down", "left", "right",
-            "home", "end", "page_up", "page_down",
-        )
 
         try:
             self._keyboard_listener = keyboard.Listener(
@@ -177,7 +221,7 @@ class KeyboardListener:
 
         if _IS_WINDOWS:
             self._focus_thread = threading.Thread(
-                target=self._watch_foreground_window, name="hotstring-focus", daemon=True
+                target=self._watch_foreground_window, name="hotstring3-focus", daemon=True
             )
             self._focus_thread.start()
 
@@ -197,6 +241,7 @@ class KeyboardListener:
         if self._focus_thread is not None:
             self._focus_thread.join(timeout=1.5)
             self._focus_thread = None
+        self._hide_suggestions()
         log.info("Keyboard listener stopped")
 
     # -- pynput callbacks ---------------------------------------------------
@@ -207,21 +252,30 @@ class KeyboardListener:
         try:
             if key in self._modifier_keys:
                 self._modifiers.add(key)
+                self._hide_suggestions()
                 return
             if not self._is_active():
                 return
+            if self._modifiers and not _shortcut_modifier_down():
+                # A release was missed while the session was locked or a secure
+                # desktop was shown; recover instead of ignoring every key.
+                log.info("Clearing stale modifier state")
+                self._modifiers.clear()
             if self._modifiers:
                 # Ctrl/Alt/Win combinations are shortcuts, not typed text.
+                self._hide_suggestions()
                 return
 
             if key in self._reset_keys:
                 self.buffer.clear()
+                self._hide_suggestions()
                 return
 
             from pynput.keyboard import Key
 
             if key == Key.backspace:
                 self.buffer.backspace()
+                self._notify_suggestions()
                 return
 
             character = getattr(key, "char", None)
@@ -238,16 +292,20 @@ class KeyboardListener:
 
     def _on_click(self, *_args: Any, **_kwargs: Any) -> None:
         self.buffer.clear()
+        self._hide_suggestions()
 
     def _check_trigger(self) -> None:
         with self._lock:
             commands = self._commands
             trigger = self.buffer.match(commands.keys())
-            if trigger is None:
-                return
-            command = commands[trigger]
+            command = commands[trigger] if trigger is not None else None
+
+        if trigger is None or command is None:
+            self._notify_suggestions()
+            return
 
         self.buffer.clear()
+        self._hide_suggestions()
         log.info("Trigger %r matched", trigger)
 
         try:
@@ -261,6 +319,35 @@ class KeyboardListener:
         except Exception:  # noqa: BLE001
             log.exception("Trigger handler failed")
 
+    # -- suggestions --------------------------------------------------------
+    def _notify_suggestions(self) -> None:
+        """Send the current suggestion state to the popup (if subscribed).
+
+        The popup coalesces updates on its own thread, so sending on every
+        keystroke keeps filtering responsive without extra complexity here.
+        """
+        if self._on_suggestions is None:
+            return
+        with self._lock:
+            if self._paused or is_input_suppressed():
+                state: SuggestionState | None = None
+            else:
+                state = self._suggestions.for_buffer(self.buffer.text)
+
+        try:
+            self._on_suggestions(state)
+        except Exception:  # noqa: BLE001 - popup failures must not break typing
+            log.exception("Suggestion callback failed")
+
+    def _hide_suggestions(self) -> None:
+        """Hide the popup without clearing the buffer."""
+        if self._on_suggestions is None:
+            return
+        try:
+            self._on_suggestions(None)
+        except Exception:  # noqa: BLE001
+            log.exception("Suggestion callback failed")
+
     # -- window focus -------------------------------------------------------
     def _watch_foreground_window(self) -> None:
         try:
@@ -272,6 +359,7 @@ class KeyboardListener:
                 window = int(user32.GetForegroundWindow())
                 if self._last_window is not None and window != self._last_window:
                     self.buffer.clear()
+                    self._hide_suggestions()
                 self._last_window = window
             except Exception:  # noqa: BLE001
                 log.debug("Foreground window polling failed", exc_info=True)

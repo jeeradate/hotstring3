@@ -6,41 +6,80 @@ import json
 import logging
 import logging.handlers
 import os
+import shutil
 import sys
 from pathlib import Path
 from typing import Any
 
-APP_NAME = "HotString"
+APP_NAME = "HotString3"
 APP_VERSION = "1.0.0"
 
-#: Root folder for logs, settings and generated icons.
-APP_DIR = Path(
-    os.environ.get(
-        "HOTSTRING_APP_DIR",
-        Path(os.environ.get("APPDATA", Path.home())) / APP_NAME,
-    )
+#: Product name used by older builds.  It is only referenced while migrating
+#: existing data, so renaming the project never silently loses a database.
+LEGACY_APP_NAME = "HotString"
+
+#: Repository root (``pyproject.toml`` lives here) and the bundled icon folder.
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+ASSETS_DIR = PROJECT_ROOT / "assets"
+
+
+def get_env(name: str, default: str | None = None) -> str | None:
+    """Return an environment override, preferring the ``HOTSTRING3_`` prefix.
+
+    ``HOTSTRING_*`` variables from earlier builds keep working as aliases so
+    existing scripts and tests do not break after the rename.
+    """
+    value = os.environ.get(f"HOTSTRING3_{name}")
+    if not value:
+        value = os.environ.get(f"HOTSTRING_{name}")
+    return default if not value else value
+
+
+_USING_DEFAULT_DATA_DIR = not any(
+    get_env(name) for name in ("DATA_DIR", "APP_DIR", "DB", "LOG", "SETTINGS")
 )
 
-#: Folder that holds the SQLite database (created on demand).
-DB_DIR = Path(os.environ.get("HOTSTRING_DB_DIR", r"D:\hotbuff"))
+#: Root folder for the database, logs, settings and generated icons.
+APP_DIR = Path(
+    get_env("DATA_DIR")
+    or get_env("APP_DIR")
+    or Path(os.environ.get("APPDATA", Path.home())) / APP_NAME
+)
 
-#: SQLite database file.  Override with the ``HOTSTRING_DB`` environment variable.
-DB_PATH = Path(os.environ.get("HOTSTRING_DB", DB_DIR / "hotstring.db"))
+#: Backwards-compatible alias that describes the folder's contents.
+DATA_DIR = APP_DIR
+
+#: Folder used by the pre-rename build, used only for a one-time migration.
+LEGACY_APP_DIR = Path(os.environ.get("APPDATA", Path.home())) / LEGACY_APP_NAME
+
+#: SQLite database file, inside the app data folder by default.
+DB_PATH = Path(get_env("DB", str(APP_DIR / "hotstring3.db")) or APP_DIR / "hotstring3.db")
+
+#: Settings key that records the one-time import of rules from the old build.
+LEGACY_IMPORT_SETTING = "legacy_import_done"
 
 #: Rotating log file location.
-LOG_PATH = Path(os.environ.get("HOTSTRING_LOG", APP_DIR / "hotstring.log"))
+LOG_PATH = Path(get_env("LOG", str(APP_DIR / "hotstring3.log")) or APP_DIR / "hotstring3.log")
 
 #: Persisted runtime settings (pause state and first-run bookkeeping).
-SETTINGS_PATH = Path(os.environ.get("HOTSTRING_SETTINGS", APP_DIR / "settings.json"))
+SETTINGS_PATH = Path(
+    get_env("SETTINGS", str(APP_DIR / "settings.json")) or APP_DIR / "settings.json"
+)
 
-#: Generated tray / window icon.
-ICON_PATH = APP_DIR / "hotstring.png"
+#: Generated window / tray icon fallback (the bundled lightning icon wins).
+ICON_PATH = APP_DIR / "hotstring3.ico"
 
 MIN_TRIGGER_LENGTH = 2
 MAX_TRIGGER_LENGTH = 8
 
 #: Number of characters kept in the rolling keyboard buffer.
 BUFFER_SIZE = 8
+
+#: Suggestions appear once the typed prefix reaches this many characters.
+SUGGESTION_MIN_PREFIX = MIN_TRIGGER_LENGTH
+
+#: Maximum number of suggestions shown in the popup at once.
+SUGGESTION_LIMIT = 6
 
 #: Valid first characters of a Command.
 COMMAND_PREFIXES: dict[str, str] = {
@@ -51,13 +90,16 @@ COMMAND_PREFIXES: dict[str, str] = {
 }
 
 #: Windows objects used for single-instance detection and cross-process signals.
-MUTEX_NAME = r"Local\HotString.SingleInstance"
-EVENT_SHOW_UI = r"Local\HotString.ShowUI"
-EVENT_RELOAD = r"Local\HotString.Reload"
-EVENT_QUIT = r"Local\HotString.Quit"
+MUTEX_NAME = r"Local\HotString3.SingleInstance"
+EVENT_SHOW_UI = r"Local\HotString3.ShowUI"
+EVENT_RELOAD = r"Local\HotString3.Reload"
+EVENT_QUIT = r"Local\HotString3.Quit"
 
 #: UI window geometry.
 WINDOW_SIZE = (1100, 780)
+
+#: Duration of the non-blocking startup background notice.
+STARTUP_NOTICE_SECONDS = 3.0
 
 DEFAULT_SETTINGS: dict[str, Any] = {
     "paused": False,
@@ -66,8 +108,46 @@ DEFAULT_SETTINGS: dict[str, Any] = {
 _logging_configured = False
 
 
+def uses_default_data_dir() -> bool:
+    """Return whether the default data folder is in use (no path overrides)."""
+    return _USING_DEFAULT_DATA_DIR
+
+
+def _migrate_legacy_data() -> None:
+    """Copy the previous build's log and settings on first start.
+
+    Only runs when the default (non-overridden) data folder is used.  Existing
+    files are never overwritten, so a failed or interrupted migration can
+    safely be retried.  The database is migrated by
+    :func:`hotstring3.db.migrate_legacy_database` because it needs a consistent
+    SQLite copy (the old build used WAL, so the rows may live in the side file).
+    """
+    if not _USING_DEFAULT_DATA_DIR or not LEGACY_APP_DIR.is_dir():
+        return
+
+    pairs = (
+        ("hotstring.log", LOG_PATH),
+        ("settings.json", SETTINGS_PATH),
+    )
+    try:
+        APP_DIR.mkdir(parents=True, exist_ok=True)
+        copied = False
+        for legacy_name, target in pairs:
+            source = LEGACY_APP_DIR / legacy_name
+            if source.is_file() and not target.exists():
+                shutil.copy2(source, target)
+                copied = True
+        if copied:
+            logging.getLogger(__name__).info(
+                "Migrated log and settings from %s to %s", LEGACY_APP_DIR, APP_DIR
+            )
+    except OSError as exc:  # migration must never prevent the app from starting
+        logging.getLogger(__name__).warning("Could not migrate old data: %s", exc)
+
+
 def ensure_dirs() -> None:
     """Create the application data and database directories if they are missing."""
+    _migrate_legacy_data()
     APP_DIR.mkdir(parents=True, exist_ok=True)
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)

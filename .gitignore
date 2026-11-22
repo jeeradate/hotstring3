@@ -40,7 +40,7 @@ htmlcov/
 .pyright/
 .nicegui/
 
-# HotString runtime data
+# HotString3 runtime data
 *.db
 *.db-wal
 *.db-shm

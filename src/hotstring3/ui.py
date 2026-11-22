@@ -11,11 +11,13 @@ from __future__ import annotations
 import logging
 import os
 import socket
+from typing import Any
 
-from nicegui import ui
+from nicegui import app, ui
 
 from . import autostart, config, db, executor, models, signals
-from .tray import ensure_icon_file
+from .icon import ensure_icon_file
+from .powershell import get_powershell_info
 
 log = logging.getLogger(__name__)
 
@@ -61,12 +63,90 @@ def _event_row(event) -> dict:  # noqa: ANN001
     return args if isinstance(args, dict) else {}
 
 
-def _status_badge() -> None:
-    paused = config.is_paused()
-    if paused:
-        ui.badge("Paused", color="amber-8").props("rounded").classes("text-xs")
-    else:
-        ui.badge("Listening", color="green-7").props("rounded").classes("text-xs")
+class _StatusPanel:
+    """Listening badge plus the total HotString count, kept in sync by a timer."""
+
+    def __init__(self) -> None:
+        with ui.row().classes("items-center gap-2"):
+            self._badge = ui.badge("Listening", color="green-7").props("rounded").classes(
+                "text-xs"
+            )
+            self._count = ui.label("Total: 0").classes("text-xs text-slate-500 whitespace-nowrap")
+        self._pause_switch: Any = None
+        self._syncing_pause = False
+        self.refresh()
+
+    def bind_pause_switch(self, pause_switch: Any) -> None:
+        """Keep the settings pause switch in sync with tray-driven changes."""
+        self._pause_switch = pause_switch
+
+    def refresh(self) -> None:
+        """Re-read the pause flag and row count; safe to call from any UI event."""
+        paused = config.is_paused()
+        self._badge.set_text("Paused" if paused else "Listening")
+        self._badge.props(f"color={'amber-8' if paused else 'green-7'}")
+        try:
+            total = db.count_hotstrings()
+        except Exception:  # noqa: BLE001 - the status line must never break the page
+            log.exception("Could not count HotStrings")
+            total = 0
+        self._count.set_text(f"Total: {total}")
+
+        if (
+            self._pause_switch is not None
+            and not self._syncing_pause
+            and bool(self._pause_switch.value) != paused
+        ):
+            self._syncing_pause = True
+            try:
+                self._pause_switch.value = paused
+            finally:
+                self._syncing_pause = False
+
+
+def _close_window() -> None:
+    """Close the native UI window (the tray keeps the app alive)."""
+    try:
+        window = getattr(app.native, "main_window", None)
+        if window is not None:
+            window.destroy()
+        else:
+            ui.run_javascript("window.close()")  # browser development mode
+    except Exception as exc:  # noqa: BLE001
+        log.exception("Could not close the UI window")
+        ui.notify(f"Could not close the window: {exc}", type="negative")
+
+
+def _confirm_quit() -> None:
+    """Ask for confirmation, then stop the listener, tray and UI process."""
+    with ui.dialog() as dialog, ui.card().classes("max-w-md p-6 gap-3 rounded-xl"):
+        ui.label("Quit HotString3?").classes("text-lg font-semibold text-slate-800")
+        ui.label(
+            "This stops the background hotkey listener, removes the system tray icon "
+            "and closes this window. Hotkeys will stop working until you start the app again."
+        ).classes("text-sm text-slate-600")
+
+        def quit_application() -> None:
+            dialog.close()
+            if signals.signal_quit():
+                ui.notify("Shutting down HotString3…", type="positive")
+            else:
+                ui.notify(
+                    "No running background instance was found; closing this window only.",
+                    type="warning",
+                )
+            ui.timer(0.8, _close_window, once=True)
+
+        with ui.row().classes("w-full justify-end gap-2 mt-2"):
+            ui.button("Cancel", on_click=dialog.close).props("flat rounded")
+            ui.button(
+                "Quit application",
+                icon="power_settings_new",
+                color="negative",
+                on_click=quit_application,
+            ).props("unelevated rounded")
+
+    dialog.open()
 
 
 # ---------------------------------------------------------------------------
@@ -74,21 +154,22 @@ def _status_badge() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _render_header() -> None:
+def _render_header() -> _StatusPanel:
     with ui.row().classes("w-full items-center justify-between gap-4"):
         with ui.row().classes("items-center gap-3"):
             with ui.element("div").classes(
                 "w-12 h-12 rounded-xl bg-blue-600 flex items-center justify-center shadow-md"
             ):
-                ui.icon("keyboard_alt", size="28px").classes("text-white")
+                ui.icon("bolt", size="28px").classes("text-white")
             with ui.column().classes("gap-0"):
-                ui.label("HotString").classes("text-2xl font-bold text-slate-800 leading-tight")
+                ui.label("HotString3").classes("text-2xl font-bold text-slate-800 leading-tight")
                 ui.label("Type less. Do more.").classes("text-sm text-slate-500")
         with ui.row().classes("items-center gap-3"):
-            _status_badge()
+            status = _StatusPanel()
             ui.button("Log folder", icon="folder_open", on_click=_open_log_folder).props(
                 "flat dense color=grey-8"
             )
+    return status
 
 
 def _open_log_folder() -> None:
@@ -109,9 +190,9 @@ def _render_onboarding() -> None:
             ):
                 ui.icon("bolt", size="32px").classes("text-white")
             with ui.column().classes("gap-1"):
-                ui.label("Welcome to HotString").classes("text-3xl font-bold")
+                ui.label("Welcome to HotString3").classes("text-3xl font-bold")
                 ui.label(
-                    "Type a short trigger anywhere on Windows and HotString does the rest."
+                    "Type a short trigger anywhere on Windows and HotString3 does the rest."
                 ).classes("text-blue-100")
         with ui.row().classes("gap-2 mt-6 flex-wrap"):
             for prefix, label, _example in EXAMPLE_COMMANDS:
@@ -125,7 +206,7 @@ def _render_onboarding() -> None:
             steps = [
                 ("1", "Pick a trigger", "2–8 characters, no spaces. Example: ;hs"),
                 ("2", "Attach a command", "Type text, run PowerShell, or open this window."),
-                ("3", "Type it anywhere", "HotString erases the trigger and runs the command."),
+                ("3", "Type it anywhere", "HotString3 erases the trigger and runs the command."),
             ]
             for number, title, description in steps:
                 with ui.row().classes("items-start gap-3 mt-3"):
@@ -168,7 +249,7 @@ def _render_onboarding() -> None:
                 .classes("w-full sm:w-40")
             )
             description = (
-                ui.input("Description", value="Open HotString")
+                ui.input("Description", value="Open HotString3")
                 .props("outlined dense")
                 .classes("flex-1")
             )
@@ -177,7 +258,7 @@ def _render_onboarding() -> None:
             .props("outlined dense")
             .classes("w-full font-mono")
         )
-        start_with_windows = ui.checkbox("Start HotString when Windows starts", value=True)
+        start_with_windows = ui.checkbox("Start HotString3 when Windows starts", value=True)
 
         def create_first() -> None:
             error = _trigger_error(trigger.value or "") or _command_error(command.value or "")
@@ -185,24 +266,32 @@ def _render_onboarding() -> None:
                 ui.notify(error, type="negative")
                 return
             try:
-                db.create_hotstring(
+                saved = db.upsert_hotstring(
                     trigger.value,
                     description.value or "",
                     command.value,
                     enabled=True,
+                    update_existing=False,
                 )
             except ValueError as exc:
                 ui.notify(str(exc), type="negative")
                 return
 
+            if not saved.created:
+                ui.notify(
+                    f"Trigger '{trigger.value}' already exists. Choose a different one.",
+                    type="warning",
+                )
+                return
+
             if start_with_windows.value:
                 if not autostart.enable():
                     ui.notify(
-                        "HotString was created, but the start-with-Windows entry could not be written.",
+                        "HotString3 was created, but the start-with-Windows entry could not be written.",
                         type="warning",
                     )
             signals.signal_reload()
-            ui.notify("HotString created. Try typing ;hs anywhere!", type="positive")
+            ui.notify("HotString3 created. Try typing ;hs anywhere!", type="positive")
             ui.navigate.reload()
 
         ui.button("Create HotString", icon="check", on_click=create_first).props(
@@ -210,12 +299,12 @@ def _render_onboarding() -> None:
         ).classes("mt-2")
 
     ui.label(
-        "Closing this window hides the UI — HotString keeps running in the system tray. "
+        "Closing this window hides the UI — HotString3 keeps running in the system tray. "
         "Use the pencil icon to edit triggers or the trash icon to delete them."
     ).classes("text-xs text-slate-500")
 
 
-def _render_management() -> None:
+def _render_management(status: _StatusPanel) -> None:
     with ui.row().classes("w-full items-center justify-between gap-3 flex-wrap"):
         search = (
             ui.input(placeholder="Search triggers, descriptions or commands…")
@@ -320,6 +409,7 @@ def _render_management() -> None:
         table.rows = rows
         table.update()
         empty_label.set_visibility(not rows)
+        status.refresh()
 
     def open_editor(existing: dict | None = None) -> None:
         is_edit = existing is not None
@@ -423,7 +513,7 @@ def _render_management() -> None:
                                 command=command.value,
                                 enabled=bool(enabled.value),
                             )
-                            message = "HotString updated."
+                            message = "HotString3 updated."
                         else:
                             db.create_hotstring(
                                 trigger.value,
@@ -431,7 +521,7 @@ def _render_management() -> None:
                                 command.value,
                                 enabled=bool(enabled.value),
                             )
-                            message = "HotString created."
+                            message = "HotString3 created."
                     except ValueError as exc:
                         ui.notify(str(exc), type="negative")
                         return
@@ -451,7 +541,7 @@ def _render_management() -> None:
 
         with ui.dialog() as dialog, ui.card().classes("max-w-md p-6 gap-3 rounded-xl"):
             ui.label(f"Delete '{trigger}'?").classes("text-lg font-semibold text-slate-800")
-            ui.label("This HotString will stop working immediately. This cannot be undone.").classes(
+            ui.label("This HotString3 will stop working immediately. This cannot be undone.").classes(
                 "text-sm text-slate-600"
             )
 
@@ -461,7 +551,7 @@ def _render_management() -> None:
                 refresh()
                 dialog.close()
                 ui.notify(
-                    "HotString deleted." if ok else "HotString was already deleted.",
+                    "HotString3 deleted." if ok else "HotString3 was already deleted.",
                     type="info" if ok else "warning",
                 )
 
@@ -481,7 +571,7 @@ def _render_management() -> None:
         ui.label("Settings").classes("text-lg font-semibold text-slate-800")
         with ui.row().classes("w-full gap-8 flex-col sm:flex-row"):
             start_switch = ui.switch(
-                "Start HotString when Windows starts", value=autostart.is_enabled()
+                "Start HotString3 when Windows starts", value=autostart.is_enabled()
             )
 
             def toggle_autostart(event) -> None:  # noqa: ANN001
@@ -491,9 +581,9 @@ def _render_management() -> None:
                     ui.notify("Could not update the Windows startup entry.", type="negative")
                 else:
                     ui.notify(
-                        "HotString will start with Windows."
+                        "HotString3 will start with Windows."
                         if wanted
-                        else "HotString will no longer start with Windows.",
+                        else "HotString3 will no longer start with Windows.",
                         type="positive",
                     )
                 start_switch.value = autostart.is_enabled()
@@ -501,11 +591,13 @@ def _render_management() -> None:
             start_switch.on_value_change(toggle_autostart)
 
             pause_switch = ui.switch("Pause listening", value=config.is_paused())
+            status.bind_pause_switch(pause_switch)
 
             def toggle_pause(event) -> None:  # noqa: ANN001
                 paused = bool(event.value)
                 config.set_paused(paused)
                 signals.signal_reload()
+                status.refresh()
                 ui.notify(
                     "Listening paused. Triggers will not fire." if paused else "Listening resumed.",
                     type="info",
@@ -513,10 +605,28 @@ def _render_management() -> None:
 
             pause_switch.on_value_change(toggle_pause)
 
+        ui.separator().classes("my-2")
+        with ui.row().classes("w-full items-center justify-between gap-3 flex-wrap"):
+            ui.label(
+                "Hiding the window removes it from the taskbar; the listener and tray icon keep running."
+            ).classes("text-sm text-slate-500")
+            with ui.row().classes("items-center gap-2"):
+                ui.button("Hide to tray", icon="visibility_off", on_click=_close_window).props(
+                    "flat rounded"
+                )
+                ui.button(
+                    "Quit HotString3",
+                    icon="power_settings_new",
+                    color="negative",
+                    on_click=_confirm_quit,
+                ).props("unelevated rounded")
+
     with ui.column().classes("w-full gap-1 pt-2"):
         ui.label(f"Database: {db.current_db_path()}").classes("text-xs text-slate-400 font-mono")
         ui.label(f"Log: {config.LOG_PATH}").classes("text-xs text-slate-400 font-mono")
-        ui.label(f"HotString {config.APP_VERSION} · Closing this window keeps the app in the tray.").classes(
+        powershell_info = get_powershell_info()
+        ui.label(powershell_info.status_text()).classes("text-xs text-slate-400 font-mono")
+        ui.label(f"HotString3 {config.APP_VERSION} · Closing this window keeps the app in the tray.").classes(
             "text-xs text-slate-400"
         )
 
@@ -530,7 +640,7 @@ def _render_management() -> None:
 
 def _native_available() -> bool:
     """Return whether a native pywebview window can be opened."""
-    if os.environ.get("HOTSTRING_NO_NATIVE") == "1":
+    if config.get_env("NO_NATIVE") == "1":
         return False
     try:
         import webview  # noqa: F401
@@ -541,7 +651,7 @@ def _native_available() -> bool:
 
 def _choose_port() -> int:
     """Pick a free local port for the NiceGUI server."""
-    override = os.environ.get("HOTSTRING_UI_PORT")
+    override = config.get_env("UI_PORT")
     if override:
         return int(override)
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -555,11 +665,12 @@ def register_page(onboarding: bool = False) -> None:
     @ui.page("/")
     def index() -> None:
         with ui.column().classes("w-full max-w-6xl mx-auto p-4 md:p-8 gap-6"):
-            _render_header()
+            status = _render_header()
+            ui.timer(1.0, status.refresh)
             if onboarding and db.is_first_run():
                 _render_onboarding()
             else:
-                _render_management()
+                _render_management(status)
 
 
 def run_ui_process(onboarding: bool = False) -> None:
@@ -576,7 +687,7 @@ def run_ui_process(onboarding: bool = False) -> None:
     ui.run(
         host="127.0.0.1",
         port=port,
-        title="HotString",
+        title="HotString3",
         favicon=icon_path or None,
         native=native,
         window_size=config.WINDOW_SIZE,

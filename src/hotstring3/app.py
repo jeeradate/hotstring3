@@ -11,8 +11,11 @@ import threading
 from pathlib import Path
 
 from . import autostart, config, db, signals
+from .background_notice import BackgroundNotice
 from .executor import CommandExecutor
 from .listener import KeyboardListener
+from .suggestion_popup import SuggestionPopup
+from .suggestions import SuggestionState, TriggerSuggestion
 from .tray import TrayIcon
 
 log = logging.getLogger(__name__)
@@ -54,7 +57,7 @@ class SingleInstance:
 
         # Development fallback for non-Windows systems.
         config.ensure_dirs()
-        lock_path = config.APP_DIR / "hotstring.lock"
+        lock_path = config.APP_DIR / "hotstring3.lock"
         try:
             import fcntl
 
@@ -81,8 +84,8 @@ class SingleInstance:
                 self._lock_fd = None
 
 
-class HotStringApplication:
-    """Owns all long-running parts of HotString."""
+class HotString3Application:
+    """Owns all long-running parts of HotString3."""
 
     def __init__(self) -> None:
         self._stop = threading.Event()
@@ -90,6 +93,8 @@ class HotStringApplication:
         self._listener: KeyboardListener | None = None
         self._tray: TrayIcon | None = None
         self._executor: CommandExecutor | None = None
+        self._popup = SuggestionPopup()
+        self._notice = BackgroundNotice()
         self._ui_process: subprocess.Popen | None = None
 
     # -- startup ------------------------------------------------------------
@@ -98,7 +103,8 @@ class HotStringApplication:
         config.setup_logging()
         config.ensure_dirs()
         db.init_db()
-        log.info("Starting HotString %s", config.APP_VERSION)
+        log.info("Starting HotString3 %s", config.APP_VERSION)
+        autostart.migrate_legacy_entry()
 
         self._executor = CommandExecutor(
             open_ui=self.open_ui,
@@ -108,8 +114,9 @@ class HotStringApplication:
         self._listener = KeyboardListener(
             self._on_trigger,
             on_error=self._notify_error,
+            on_suggestions=self._on_suggestions,
         )
-        self._listener.reload(db.enabled_commands())
+        self._reload_listener()
         self._listener.set_paused(config.is_paused())
         self._listener.start()
 
@@ -135,7 +142,11 @@ class HotStringApplication:
             log.info("First run detected; opening onboarding")
             self.open_ui(onboarding=True)
 
-        log.info("HotString is running in the background")
+        log.info("HotString3 is running in the background")
+        self._notice.show(
+            "Hotkey listener is running in the background",
+            config.STARTUP_NOTICE_SECONDS,
+        )
         try:
             while not self._stop.wait(0.5):
                 if self._ui_process is not None and self._ui_process.poll() is not None:
@@ -152,11 +163,35 @@ class HotStringApplication:
         assert self._executor is not None
         self._executor.execute_async(command)
 
+    def _on_suggestions(self, state: SuggestionState | None) -> None:
+        """Forward listener updates to the popup thread."""
+        if state is None:
+            self._popup.hide()
+        else:
+            self._popup.show(state)
+
+    def _reload_listener(self) -> None:
+        """Load enabled commands and their display data into the listener."""
+        if self._listener is None:
+            return
+        rows = db.enabled_hotstrings()
+        self._listener.reload(
+            {row.trigger: row.command for row in rows},
+            [
+                TriggerSuggestion(
+                    trigger=row.trigger,
+                    description=row.description,
+                    command=row.command,
+                )
+                for row in rows
+            ],
+        )
+
     def _notify_error(self, message: str) -> None:
         log.error(message)
         if self._tray is not None:
             short = message if len(message) <= 180 else message[:177] + "…"
-            self._tray.notify(short, "HotString error")
+            self._tray.notify(short, "HotString3 error")
 
     def _toggle_pause(self) -> bool:
         paused = not config.is_paused()
@@ -176,7 +211,7 @@ class HotStringApplication:
         """Reload triggers and settings after the UI changed them."""
         try:
             if self._listener is not None:
-                self._listener.reload(db.enabled_commands())
+                self._reload_listener()
                 self._listener.set_paused(config.is_paused())
             if self._tray is not None:
                 self._tray.refresh_menu()
@@ -191,7 +226,7 @@ class HotStringApplication:
         if self._ui_process is not None and self._ui_process.poll() is None:
             return
 
-        argv = [sys.executable, "-m", "hotstring", "--ui"]
+        argv = [sys.executable, "-m", "hotstring3", "--ui"]
         if onboarding:
             argv.append("--onboarding")
 
@@ -216,7 +251,7 @@ class HotStringApplication:
             log.info("Opened UI process (pid %s)", self._ui_process.pid)
         except OSError as exc:
             log.exception("Could not start the UI process")
-            self._notify_error(f"Could not open the HotString window: {exc}")
+            self._notify_error(f"Could not open the HotString3 window: {exc}")
 
     # -- shutdown -----------------------------------------------------------
     def request_exit(self) -> None:
@@ -225,7 +260,7 @@ class HotStringApplication:
 
     def shutdown(self) -> None:
         """Stop every component and exit cleanly."""
-        log.info("Shutting down HotString")
+        log.info("Shutting down HotString3")
         if self._ui_process is not None and self._ui_process.poll() is None:
             try:
                 self._ui_process.terminate()
@@ -243,12 +278,14 @@ class HotStringApplication:
         if self._tray is not None:
             self._tray.stop()
             self._tray = None
+        self._popup.close()
+        self._notice.close()
         self._signals.close()
-        log.info("HotString stopped")
+        log.info("HotString3 stopped")
 
 
 def run_application() -> int:
-    """Entry point used by the console script and ``python -m hotstring``."""
+    """Entry point used by the console script and ``python -m hotstring3``."""
     config.setup_logging()
     instance = SingleInstance()
     if not instance.acquire():
@@ -257,9 +294,9 @@ def run_application() -> int:
         return 0
 
     try:
-        return HotStringApplication().run()
+        return HotString3Application().run()
     except Exception:  # noqa: BLE001 - log fatal startup errors instead of dying silently
-        log.exception("Fatal error in HotString")
+        log.exception("Fatal error in HotString3")
         raise
     finally:
         instance.release()

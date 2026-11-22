@@ -1,7 +1,7 @@
 [project]
-name = "hotstring"
+name = "hotstring3"
 version = "1.0.0"
-description = "A Windows text expander and command launcher: type a short trigger, run a command."
+description = "HotString3 — a Windows text expander and command launcher: type a short trigger, run a command."
 readme = "README.md"
 license = { file = "LICENSE" }
 authors = [
@@ -32,12 +32,12 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/jeeradate/hotstring"
-Repository = "https://github.com/jeeradate/hotstring"
-Issues = "https://github.com/jeeradate/hotstring/issues"
+Homepage = "https://github.com/jeeradate/hotstring3"
+Repository = "https://github.com/jeeradate/hotstring3"
+Issues = "https://github.com/jeeradate/hotstring3/issues"
 
 [project.scripts]
-hotstring = "hotstring.__main__:main"
+hotstring3 = "hotstring3.__main__:main"
 
 [dependency-groups]
 dev = [
@@ -51,3 +51,6 @@ addopts = "-q"
 [build-system]
 requires = ["uv_build>=0.12.23,<0.13.0"]
 build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "hotstring3"

@@ -6,48 +6,15 @@ import logging
 import threading
 from typing import Callable
 
-from PIL import Image, ImageDraw, ImageFont
-
-from . import config
+from .icon import load_icon_image
 
 log = logging.getLogger(__name__)
 
-TITLE = "HotString"
-
-
-def create_icon_image(size: int = 64) -> Image.Image:
-    """Draw the HotString tray icon (a blue rounded square with ``HS``)."""
-    image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(image)
-    draw.rounded_rectangle(
-        (2, 2, size - 3, size - 3),
-        radius=max(6, size // 5),
-        fill=(37, 99, 235, 255),
-        outline=(29, 78, 216, 255),
-        width=max(1, size // 32),
-    )
-    try:
-        font = ImageFont.load_default(size=int(size * 0.42))
-    except TypeError:  # pragma: no cover - very old Pillow
-        font = ImageFont.load_default()
-    draw.text((size / 2, size / 2), "HS", fill=(255, 255, 255, 255), font=font, anchor="mm")
-    return image
-
-
-def ensure_icon_file() -> str:
-    """Create (once) and return the path of a PNG version of the app icon."""
-    try:
-        config.APP_DIR.mkdir(parents=True, exist_ok=True)
-        if not config.ICON_PATH.exists():
-            create_icon_image(256).save(config.ICON_PATH, format="PNG")
-        return str(config.ICON_PATH)
-    except OSError as exc:
-        log.warning("Could not write the application icon: %s", exc)
-        return ""
+TITLE = "HotString3"
 
 
 class TrayIcon:
-    """Windows notification-area icon with a HotString menu.
+    """Windows notification-area icon with a HotString3 menu.
 
     All user actions are delegated to callbacks owned by the application, so the
     tray module stays free of business logic.
@@ -84,16 +51,16 @@ class TrayIcon:
 
         try:
             self._icon = pystray.Icon(
-                "HotString",
-                create_icon_image(),
-                "HotString — type less, do more",
+                "HotString3",
+                load_icon_image(64),
+                "HotString3 — type less, do more",
                 self._build_menu(),
             )
         except Exception:  # noqa: BLE001 - a tray failure must not stop the listener
             log.exception("Could not create the tray icon")
             return
 
-        self._thread = threading.Thread(target=self._run, name="hotstring-tray", daemon=True)
+        self._thread = threading.Thread(target=self._run, name="hotstring3-tray", daemon=True)
         self._thread.start()
         log.info("Tray icon started")
 
@@ -123,7 +90,7 @@ class TrayIcon:
 
         pause_label = "Resume listening" if self._is_paused() else "Pause listening"
         return pystray.Menu(
-            pystray.MenuItem("Open HotString", lambda: self._safe(self._on_open), default=True),
+            pystray.MenuItem("Open HotString3", lambda: self._safe(self._on_open), default=True),
             pystray.MenuItem(pause_label, lambda: self._safe(self._on_toggle_pause, refresh=True)),
             pystray.MenuItem(
                 "Start with Windows",

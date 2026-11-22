@@ -7,13 +7,13 @@ from pathlib import Path
 import pytest
 from sqlmodel import Session
 
-from hotstring import config, db
-from hotstring.models import HotString, find_suffix_conflicts, validate_trigger
+from hotstring3 import config, db
+from hotstring3.models import HotString, find_suffix_conflicts, validate_trigger
 
 
 @pytest.fixture()
 def temp_db(tmp_path: Path):
-    db.configure(tmp_path / "hotstring-test.db")
+    db.configure(tmp_path / "hotstring3-test.db")
     db.init_db()
     yield
     db.reset_engine()
@@ -164,6 +164,94 @@ def test_enabled_commands_only_returns_enabled(temp_db) -> None:
     db.create_hotstring(";a1", "", "tone", enabled=True)
     db.create_hotstring(";a2", "", "ttwo", enabled=False)
     assert db.enabled_commands() == {";a1": "tone"}
+    assert [item.trigger for item in db.enabled_hotstrings()] == [";a1"]
+
+
+def test_count_hotstrings_includes_disabled(temp_db) -> None:
+    assert db.count_hotstrings() == 0
+    db.create_hotstring(";a1", "", "tone")
+    db.create_hotstring(";a2", "", "ttwo", enabled=False)
+    assert db.count_hotstrings() == 2
+    db.seed_hotstrings([db.SeedEntry(";a3", "", "tthree")])
+    assert db.count_hotstrings() == 3
+
+
+# ---------------------------------------------------------------------------
+# Upsert and idempotent seeding
+# ---------------------------------------------------------------------------
+
+
+def test_upsert_creates_then_updates_without_duplicating(temp_db) -> None:
+    first = db.upsert_hotstring(";em", "Email", "tone@example.com")
+    assert first.created is True
+    assert first.updated is False
+    assert first.item.id is not None
+
+    second = db.upsert_hotstring(";em", "Work email", "ttwo@example.com", enabled=False)
+    assert second.created is False
+    assert second.updated is True
+    assert second.item.id == first.item.id
+    assert second.item.description == "Work email"
+    assert second.item.enabled is False
+    assert len(db.list_hotstrings()) == 1
+
+
+def test_upsert_can_leave_an_existing_trigger_untouched(temp_db) -> None:
+    db.create_hotstring(";em", "Mine", "tkeep@example.com")
+    result = db.upsert_hotstring(";em", "Seed", "tseed", update_existing=False)
+    assert result.created is False
+    assert result.updated is False
+    stored = db.get_by_trigger(";em")
+    assert stored is not None
+    assert stored.description == "Mine"
+
+
+def test_upsert_respects_validation(temp_db) -> None:
+    with pytest.raises(ValueError):
+        db.upsert_hotstring(";", "Too short", "tHello")
+    with pytest.raises(ValueError):
+        db.upsert_hotstring(";ok", "Bad command", "nonsense")
+    assert db.list_hotstrings() == []
+
+
+def test_seed_is_idempotent_by_default(temp_db) -> None:
+    entries = [
+        db.SeedEntry(";em", "Email", "tone@example.com"),
+        db.SeedEntry(";np", "Notepad", "sStart-Process notepad"),
+    ]
+    first = db.seed_hotstrings(entries)
+    assert first.created == [";em", ";np"]
+    assert first.unchanged == []
+
+    second = db.seed_hotstrings(entries)
+    assert second.created == []
+    assert second.unchanged == [";em", ";np"]
+    assert len(db.list_hotstrings()) == 2
+
+
+def test_seed_can_update_existing_rules(temp_db) -> None:
+    db.create_hotstring(";em", "Old", "told")
+    result = db.seed_hotstrings(
+        [db.SeedEntry(";em", "New", "tnew")],
+        update_existing=True,
+    )
+    assert result.updated == [";em"]
+    stored = db.get_by_trigger(";em")
+    assert stored is not None
+    assert (stored.description, stored.command) == ("New", "tnew")
+
+
+def test_seed_skips_invalid_entries_and_keeps_valid_ones(temp_db) -> None:
+    result = db.seed_hotstrings(
+        [
+            db.SeedEntry(";ok", "Valid", "tHello"),
+            db.SeedEntry("x", "Bad trigger", "tHello"),
+            db.SeedEntry(";bad", "Bad command", "nonsense"),
+        ]
+    )
+    assert result.created == [";ok"]
+    assert [trigger for trigger, _message in result.skipped] == ["x", ";bad"]
+    assert [item.trigger for item in db.list_hotstrings()] == [";ok"]
 
 
 def test_startup_commands(temp_db) -> None:
@@ -192,8 +280,8 @@ def test_first_run_when_aopen_is_disabled(temp_db) -> None:
 
 
 def test_database_uses_configured_path(temp_db, tmp_path: Path) -> None:
-    assert db.current_db_path() == tmp_path / "hotstring-test.db"
-    assert (tmp_path / "hotstring-test.db").exists()
+    assert db.current_db_path() == tmp_path / "hotstring3-test.db"
+    assert (tmp_path / "hotstring3-test.db").exists()
 
 
 def test_models_roundtrip_through_session(temp_db) -> None:

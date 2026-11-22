@@ -1,4 +1,4 @@
-"""HotString — a Windows text expander and command launcher."""
+"""HotString3 — a Windows text expander and command launcher."""
 
 from .config import APP_NAME, APP_VERSION
 

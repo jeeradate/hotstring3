@@ -1,16 +1,16 @@
-# HotString
+# HotString3
 
 **Type less. Do more.**
 
-HotString is a lightweight Windows text expander and command launcher. Create a short trigger
-(2–8 characters, for example `;em`), type it in **any** application, and HotString erases it and
+HotString3 is a lightweight Windows text expander and command launcher. Create a short trigger
+(2–8 characters, for example `;em`), type it in **any** application, and HotString3 erases it and
 runs the command you attached to it — type text, launch programs with PowerShell, or open the
-HotString window itself.
+HotString3 window itself.
 
 Built with Python, [NiceGUI](https://nicegui.io/) (native pywebview window), SQLModel/SQLite,
 `pynput` for the global keyboard hook and `pystray` for the tray icon.
 
-![HotString management window](docs/screenshots/management.png)
+![HotString3 management window](docs/screenshots/management.png)
 
 ![First-run onboarding](docs/screenshots/onboarding.png)
 
@@ -18,18 +18,32 @@ Built with Python, [NiceGUI](https://nicegui.io/) (native pywebview window), SQL
 
 ## Features
 
-- **Global triggers** — works in any focused application, not just the HotString window.
+- **Global triggers** — works in any focused application, not just the HotString3 window.
 - **Instant management** — add, edit, delete, enable or disable HotStrings; changes apply
   immediately, no restart.
+- **Trigger suggestions** — after two characters, a non-activating popup lists matching triggers
+  and descriptions while you keep typing.
 - **Three command types** — type Unicode text, run hidden PowerShell, or trigger an app action.
-- **Startup commands** — run PowerShell automatically when HotString starts.
+- **Startup commands** — run PowerShell automatically when HotString3 starts.
 - **First-run onboarding** — a guided screen creates the `;hs` → `aopen` rule for you.
-- **System tray** — open the UI, pause/resume listening, toggle start-with-Windows, exit.
-- **Single instance** — launching HotString again opens the existing instance instead of
+- **Runs in the background** — closing the window (or **Hide to tray**) removes it from the
+  taskbar while the keyboard listener and tray icon keep running.
+- **Startup notification** — a non-blocking toast confirms for three seconds that the hotkey
+  listener is running in the background.
+- **PowerShell auto-detection** — PowerShell 7 (`pwsh`) is preferred, with Windows PowerShell
+  (`powershell.exe` 5.1 or newer) as the fallback. The active executable and version are shown in
+  the UI footer.
+- **Live status** — the header shows **Listening**/**Paused** and the total HotString count, both
+  updated in real time.
+- **Clean exit** — **Settings → Quit HotString3** asks for confirmation before stopping the
+  listener, tray icon and UI.
+- **Lightning icon** — the same lightning mark is used for the window, taskbar button and system
+  tray icon.
+- **Single instance** — launching HotString3 again opens the existing instance instead of
   starting a second one.
 - **Reliable Unicode typing** — Thai, emoji and multi-line text are pasted through the clipboard,
   independent of the active keyboard layout.
-- **Rotating logs** — everything is written to `%APPDATA%\HotString\hotstring.log`.
+- **Rotating logs** — everything is written to `%APPDATA%\HotString3\hotstring3.log`.
 
 ---
 
@@ -39,16 +53,17 @@ Built with Python, [NiceGUI](https://nicegui.io/) (native pywebview window), SQL
 - Python 3.11 or newer
 - [`uv`](https://docs.astral.sh/uv/) for dependency management
 - Microsoft Edge WebView2 Runtime (pre-installed on Windows 11 and most Windows 10 machines)
+- PowerShell 7 (`pwsh`) and/or Windows PowerShell 5.1+ (detected automatically)
 
 ---
 
 ## Installation
 
 ```bash
-git clone https://github.com/jeeradate/hotstring.git
-cd hotstring
+git clone https://github.com/jeeradate/hotstring3.git
+cd hotstring3
 uv sync
-uv run hotstring
+uv run hotstring3
 ```
 
 The first start opens the welcome screen. It explains triggers and the command format and asks
@@ -57,13 +72,18 @@ you to create your first HotString, pre-filled with:
 | Field | Value |
 | --- | --- |
 | Trigger | `;hs` |
-| Description | Open HotString |
+| Description | Open HotString3 |
 | Command | `aopen` |
 
-The **Start HotString when Windows starts** checkbox is checked by default.
+The **Start HotString3 when Windows starts** checkbox is checked by default.
 
-After that, HotString starts silently in the system tray on every launch. To open the window,
-double-click the tray icon or choose **Open HotString**.
+After that, HotString3 starts silently in the system tray on every launch and shows the
+three-second **“Hotkey listener is running in the background”** toast. To open the window,
+double-click the tray icon or choose **Open HotString3**.
+
+> Renaming the project folder is optional. HotString3 resolves its package and icon paths from
+> the installed package, so `uv run hotstring3` works from any folder name. If you kept an older
+> checkout, rename it to `hotstring3` and run `uv sync` again.
 
 ---
 
@@ -75,10 +95,35 @@ Create these HotStrings in the UI, then try them in Notepad, your browser, or an
 | --- | --- | --- |
 | `;em` | `tmyname@example.com` | Types your e-mail address |
 | `;np` | `sStart-Process notepad` | Opens Notepad (no console window) |
-| `;hs` | `aopen` | Opens the HotString management window |
+| `;hs` | `aopen` | Opens the HotString3 management window |
 | `;th` | `tสวัสดีครับ` | Types Thai text (Unicode-safe) |
 
-Type the trigger, and HotString removes it and runs the command.
+Type the trigger, and HotString3 removes it and runs the command. After you have typed the first
+**two** characters of a trigger, a popup also shows the matching triggers and their descriptions.
+
+---
+
+## Trigger suggestions
+
+As you type in any application, HotString3 checks whether the most recent characters are the start
+of an enabled trigger. Once that prefix is at least two characters long (for example `;e`), a small
+popup appears with every matching trigger and its description:
+
+![Trigger suggestion popup](docs/screenshots/suggestions.png)
+
+The popup is designed to stay out of the way:
+
+- It **never takes keyboard focus** — typing continues in the application underneath.
+- It **filters as you type**: `;e` shows `;em`, `;email` and `;en`; `;ema` narrows the list.
+- It follows the text caret (falling back to the mouse pointer) and stays on the current monitor,
+  flipping above the line near the bottom of the screen.
+- It **dismisses automatically** when the trigger fires, the prefix stops matching, or you press
+  Esc/Tab/Enter, an arrow/Home/End/PageUp/PageDown key, click the mouse, switch windows or pause
+  listening. Clicking the popup also hides it.
+- Only **enabled** HotStrings are suggested, and matching is case-sensitive.
+
+Suggestions are display-only; the trigger still fires only when the full trigger has been typed.
+If Tk is unavailable, HotString3 logs a warning and keeps working without the popup.
 
 ---
 
@@ -90,8 +135,8 @@ A command is plain text. Its **first character** defines its type:
 | --- | --- | --- | --- |
 | `t` | Type text | Pastes text into the focused application | `tHello world` |
 | `s` | PowerShell | Runs a hidden PowerShell script | `sStart-Process notepad` |
-| `a` | App action | Runs a built-in HotString action (`aopen` opens the UI) | `aopen` |
-| `r` | Startup | Runs a hidden PowerShell script when HotString starts | `rStart-Process notepad` |
+| `a` | App action | Runs a built-in HotString3 action (`aopen` opens the UI) | `aopen` |
+| `r` | Startup | Runs a hidden PowerShell script when HotString3 starts | `rStart-Process notepad` |
 
 One optional separator directly after the prefix is ignored, so all of these are equivalent:
 
@@ -106,15 +151,30 @@ unchanged, including newlines.
 
 Notes:
 
-- `t` supports **Unicode (including Thai) and multi-line text**. HotString temporarily puts the
+- `t` supports **Unicode (including Thai) and multi-line text**. HotString3 temporarily puts the
   text on the clipboard, sends `Ctrl+V`, and restores the previous text clipboard.
-- `s` and `r` run
-  `powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -Command "<script>"`
-  with `CREATE_NO_WINDOW`, on a worker thread. stdout, stderr and the exit code are logged.
-- `r` commands run **once when HotString starts**, not every time the UI opens.
+- `s` and `r` run the script with the detected PowerShell executable, using
+  `-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -Command "<script>"` and
+  `CREATE_NO_WINDOW`, on a worker thread. stdout, stderr and the exit code are logged.
+- `r` commands run **once when HotString3 starts**, not every time the UI opens.
 - Commands with an unknown prefix are rejected by the editor and by the database layer.
 - The **Test** button in the add/edit dialog validates the command. For `t` it shows a preview
   instead of typing; for `s`/`r` it runs the script.
+
+### PowerShell selection
+
+At startup HotString3 looks for **PowerShell 7 (`pwsh`)** first, including the standard
+`%ProgramFiles%\PowerShell\7` install location. If it is not available, it falls back to
+**Windows PowerShell (`powershell.exe`) 5.1 or newer**. The version is verified by running
+`$PSVersionTable.PSVersion.ToString()`.
+
+The UI footer shows the active choice directly below the database and log paths:
+
+```text
+Database: C:\Users\you\AppData\Roaming\HotString3\hotstring3.db
+Log:      C:\Users\you\AppData\Roaming\HotString3\hotstring3.log
+PowerShell: 7.4.2 (pwsh)
+```
 
 ---
 
@@ -124,10 +184,16 @@ Notes:
 - **Add HotString** opens the editor at the bottom of the list.
 - **Edit** (pencil) and **Delete** (trash, with confirmation) appear on every row.
 - **Enabled** controls whether a trigger fires. Disabled triggers stay in the list.
+- The header shows **Listening** or **Paused**, plus **Total: N** for all configured HotStrings.
+  The count updates when HotStrings are added, deleted or imported.
 - **Settings**:
-  - *Start HotString when Windows starts* — writes/removes the registry `Run` entry.
-  - *Pause listening* — keeps the keyboard hook installed but stops matching.
-- Closing the window only hides the UI. The listener and tray icon keep running.
+  - *Start HotString3 when Windows starts* — writes/removes the registry `Run` entry.
+  - *Pause listening* — keeps the keyboard hook installed but stops matching. The header badge
+    and this switch always reflect the same state, including changes made from the tray.
+  - *Hide to tray* — closes the window and removes it from the taskbar while the listener and
+    tray icon stay active.
+  - *Quit HotString3* — asks for confirmation, then stops the background listener, closes the
+    tray icon and terminates all HotString3 processes cleanly.
 
 Validation rules in the editor:
 
@@ -140,26 +206,43 @@ Validation rules in the editor:
 
 | Item | Action |
 | --- | --- |
-| Open HotString | Opens the management window |
+| Open HotString3 | Opens (or reopens) the management window |
 | Pause listening / Resume listening | Toggles trigger matching (persisted) |
 | Start with Windows | Adds/removes the registry entry (checkmark shows current state) |
-| Exit | Stops the listener, tray icon and HotString |
+| Exit | Stops the listener, tray icon and HotString3 |
 
-Only one instance can run. Starting HotString a second time signals the running instance to open
-its window and then exits immediately.
+Double-clicking the tray icon also restores the window. Only one instance can run; starting
+HotString3 a second time signals the running instance to open its window and then exits
+immediately.
+
+---
+
+## Background behavior
+
+HotString3 is designed to live in the notification area:
+
+- Closing the window with **X** only ends the UI window. The taskbar button disappears, but the
+  keyboard listener and tray icon remain active.
+- **Settings → Hide to tray** does the same explicitly.
+- Reopen the window from the tray icon at any time.
+- On startup, a small non-blocking toast appears for **3 seconds** saying
+  “Hotkey listener is running in the background”, then dismisses itself.
+- Exiting through **Settings → Quit HotString3** or the tray **Exit** item shuts everything down:
+  the tray icon is removed, the global hook is stopped, the suggestion popup and startup notice
+  are closed, and the UI process is terminated.
 
 ---
 
 ## Start with Windows
 
-HotString registers itself under:
+HotString3 registers itself under:
 
 ```text
 HKCU\Software\Microsoft\Windows\CurrentVersion\Run
-Value name: HotString
+Value name: HotString3
 ```
 
-The value launches `pythonw.exe -m hotstring` (or the packaged executable), so no console window
+The value launches `pythonw.exe -m hotstring3` (or the packaged executable), so no console window
 appears at login. Toggle it from **Settings** in the UI or from the tray menu. Removing it is
 immediate and requires no restart.
 
@@ -183,13 +266,13 @@ window focus changes, so stale characters cannot trigger anything.
 
 > **`s` and `r` commands run PowerShell with your Windows user permissions.**
 >
-> HotString does not sandbox, sign or review commands. A malicious or careless command can delete
+> HotString3 does not sandbox, sign or review commands. A malicious or careless command can delete
 > files, change settings, download software or exfiltrate data. Only add commands you understand
 > and trust, keep your database file private, and never import HotStrings from an untrusted source.
 > Commands run with your normal permissions — not elevated — so they cannot silently administer
-> the machine unless you run HotString as administrator.
+> the machine unless you run HotString3 as administrator.
 
-The keyboard hook also sees everything you type. HotString does not record or transmit keystrokes;
+The keyboard hook also sees everything you type. HotString3 does not record or transmit keystrokes;
 only the last eight characters are held in memory to detect triggers, and the database and logs
 stay on your PC.
 
@@ -199,12 +282,55 @@ stay on your PC.
 
 | What | Path |
 | --- | --- |
-| Database | `D:\hotbuff\hotstring.db` (created automatically, including the folder) |
-| Log | `%APPDATA%\HotString\hotstring.log` (2 MB rotating, 3 backups) |
-| Settings | `%APPDATA%\HotString\settings.json` |
+| Database | `%APPDATA%\HotString3\hotstring3.db` (created automatically, including the folder) |
+| Log | `%APPDATA%\HotString3\hotstring3.log` (2 MB rotating, 3 backups) |
+| Settings | `%APPDATA%\HotString3\settings.json` |
 
-Environment overrides are available for development and testing:
-`HOTSTRING_DB`, `HOTSTRING_APP_DIR`, `HOTSTRING_SETTINGS`, `HOTSTRING_LOG`.
+On the first start after upgrading, HotString3 copies an existing
+`%APPDATA%\HotString\hotstring.db`, log and settings into the new folder if the new folder does
+not exist yet. Existing files are never overwritten, so the migration can safely be retried.
+
+Environment overrides are available for development and testing. The `HOTSTRING3_` prefix is
+preferred; the older `HOTSTRING_` names remain supported as aliases:
+
+| Variable | Effect |
+| --- | --- |
+| `HOTSTRING3_DATA_DIR` | Moves the database, log and settings to another folder |
+| `HOTSTRING3_DB` | Uses an explicit database file (highest priority) |
+| `HOTSTRING3_SETTINGS` | Uses an explicit settings file |
+| `HOTSTRING3_LOG` | Uses an explicit log file |
+| `HOTSTRING3_APP_DIR` | Older alias for `HOTSTRING3_DATA_DIR` |
+| `HOTSTRING3_NO_POPUP` | Disables the suggestion popup and startup toast |
+| `HOTSTRING3_NO_NATIVE` | Serves the UI in a browser instead of a native window |
+| `HOTSTRING3_UI_PORT` | Uses a fixed local port for the UI server |
+
+### Loading HotStrings into the database
+
+The UI writes every change to `%APPDATA%\HotString3\hotstring3.db` immediately and signals the
+running listener, so new triggers work without a restart. The onboarding screen uses the same
+upsert path, so submitting it twice cannot create duplicate triggers.
+
+For scripted or repeatable loads, use the idempotent seed API. Triggers are the unique key;
+validation is applied before writing, invalid entries are skipped, and existing rules are left
+alone unless you ask for an update:
+
+```python
+from hotstring3 import config, db
+from hotstring3.db import SeedEntry
+
+config.ensure_dirs()
+db.init_db()
+
+result = db.seed_hotstrings([
+    SeedEntry(";em", "Personal e-mail", "tme@example.com"),
+    SeedEntry(";np", "Notepad", "sStart-Process notepad"),
+])
+print(result.created, result.skipped)
+```
+
+Pass `update_existing=True` to overwrite rules with the same trigger. After seeding from a
+separate process, call `hotstring3.signals.signal_reload()` so the running listener picks the new
+triggers up immediately; the management UI does this for you.
 
 ---
 
@@ -212,15 +338,22 @@ Environment overrides are available for development and testing:
 
 - **A trigger does not fire.** Check that listening is not paused, the HotString is enabled, the
   trigger is not a suffix of another trigger, and the keyboard layout matches. Some elevated
-  windows and games using raw input do not accept synthetic input; run HotString at the same
+  windows and games using raw input do not accept synthetic input; run HotString3 at the same
   privilege level if needed.
+- **The suggestion popup does not appear.** It needs at least two typed characters that prefix an
+  enabled trigger, and listening must not be paused. Cases where the target app does not expose a
+  caret position still get a popup near the mouse pointer. Full-screen exclusive games may draw
+  over it; triggers themselves continue to work.
 - **Nothing is typed for a `t` command.** Make sure the target control accepts `Ctrl+V`. The
   clipboard is restored to its previous text after pasting; non-text clipboard content may be
   replaced.
 - **The window does not open.** Check that WebView2 is installed. Logs are in
-  `%APPDATA%\HotString\hotstring.log`; the tray menu can open the log folder.
-- **PowerShell fails.** Open the log to see stdout, stderr and the exit code. Test the same script
-  manually with `powershell.exe -NoProfile -Command "<script>"`.
+  `%APPDATA%\HotString3\hotstring3.log`; the tray menu can open the log folder.
+- **PowerShell fails.** Open the log to see the detected executable, stdout, stderr and the exit
+  code. Test the same script manually with `pwsh -NoProfile -Command "<script>"` or
+  `powershell.exe -NoProfile -Command "<script>"`.
+- **The taskbar icon is gone but hotkeys still work.** That is expected after closing the window
+  or choosing **Hide to tray**. Use the tray icon to reopen it.
 - **Two copies seem to run.** Only one background instance is allowed; a second launch asks the
   first instance to show its window.
 
@@ -229,28 +362,37 @@ Environment overrides are available for development and testing:
 ## Project structure
 
 ```text
-hotstring/
+hotstring3/
 ├── pyproject.toml
 ├── uv.lock
 ├── README.md
 ├── LICENSE
 ├── .gitignore
-├── src/hotstring/
+├── assets/
+│   └── lightning.ico        # window, taskbar and tray icon
+├── src/hotstring3/
 │   ├── __init__.py
-│   ├── __main__.py      # uv run hotstring / python -m hotstring
-│   ├── app.py           # startup, single instance, process orchestration
-│   ├── models.py        # SQLModel HotString model and validation helpers
-│   ├── db.py            # engine, session, CRUD
-│   ├── listener.py      # global keyboard hook and rolling buffer
-│   ├── executor.py      # t / s / a / r parsing and execution
-│   ├── ui.py            # NiceGUI pages, dialogs, settings
-│   ├── tray.py          # pystray icon and menu
-│   ├── autostart.py     # registry Run key
-│   ├── signals.py       # Windows named events between processes
-│   └── config.py        # paths, constants, settings, logging
+│   ├── __main__.py          # uv run hotstring3 / python -m hotstring3
+│   ├── app.py               # startup, single instance, process orchestration
+│   ├── background_notice.py # 3-second startup toast
+│   ├── icon.py              # lightning icon loading/generation
+│   ├── models.py            # SQLModel HotString model and validation helpers
+│   ├── db.py                # engine, session, CRUD, counts, seed/upsert
+│   ├── listener.py          # global keyboard hook, rolling buffer and suggestions
+│   ├── suggestions.py       # pure trigger-prefix lookup for the popup
+│   ├── suggestion_popup.py  # non-activating Tk popup window
+│   ├── executor.py          # t / s / a / r parsing and execution
+│   ├── powershell.py        # PowerShell 7 / 5.1 detection and version reporting
+│   ├── ui.py                # NiceGUI pages, dialogs, status and settings
+│   ├── tray.py              # pystray icon and menu
+│   ├── autostart.py         # registry Run key
+│   ├── signals.py           # Windows named events between processes
+│   └── config.py            # paths, constants, settings, logging
 └── tests/
     ├── test_models.py
     ├── test_matching.py
+    ├── test_suggestions.py
+    ├── test_config.py
     └── test_executor.py
 ```
 
@@ -261,11 +403,11 @@ hotstring/
 ```bash
 uv sync                 # create the environment and install dependencies
 uv run pytest           # run the test suite
-uv run hotstring        # start the app
+uv run hotstring3       # start the app
 ```
 
 To capture screenshots or develop without opening a native window, set
-`HOTSTRING_NO_NATIVE=1`; the UI then serves in a browser instead of pywebview.
+`HOTSTRING3_NO_NATIVE=1`; the UI then serves in a browser instead of pywebview.
 
 ---
 
@@ -275,292 +417,14 @@ To capture screenshots or develop without opening a native window, set
 - Triggers are limited to 8 characters and are matched case-sensitively per keyboard layout.
 - Typing support relies on clipboard paste, so clipboard history tools may record the pasted
   text and non-text clipboard contents are not restored.
-- Python PowerShell output is decoded as UTF-8; scripts that emit text in the OEM code page may
-  show replacement characters in the log.
-- Elevated applications may ignore simulated input unless HotString is elevated too.
+- PowerShell output is decoded as UTF-8; scripts that emit text in the OEM code page may show
+  replacement characters in the log.
+- Elevated applications may ignore simulated input unless HotString3 is elevated too.
+- The suggestion popup and startup toast are Windows-only (Tk + Win32). Applications that do not
+  report a text caret get a popup near the mouse pointer instead of at the insertion point.
 
 ---
 
 ## License
 
 MIT — see [LICENSE](LICENSE).
-
----
-
-# HotString (ภาษาไทย)
-
-**พิมพ์น้อยลง ทำได้มากขึ้น**
-
-HotString คือโปรแกรมขยายข้อความและเรียกคำสั่งสำหรับ Windows ขนาดเล็ก สร้าง "ทริกเกอร์" สั้น ๆ
-(2–8 ตัวอักษร เช่น `;em`) แล้วพิมพ์ทริกเกอร์นั้นในแอปใดก็ได้ HotString จะลบข้อความที่พิมพ์และรัน
-คำสั่งที่ผูกไว้ทันที — พิมพ์ข้อความ เปิดโปรแกรมด้วย PowerShell หรือเปิดหน้าต่างจัดการ HotString
-
-สร้างด้วย Python, [NiceGUI](https://nicegui.io/) (หน้าต่างเดสก์ท็อปผ่าน pywebview),
-SQLModel/SQLite, `pynput` สำหรับดักคีย์บอร์ดทั่วระบบ และ `pystray` สำหรับไอคอนถาดระบบ
-
-![หน้าต่างจัดการ HotString](docs/screenshots/management.png)
-
-![หน้าเริ่มต้นใช้งานครั้งแรก](docs/screenshots/onboarding.png)
-
----
-
-## คุณสมบัติ
-
-- **ทริกเกอร์ใช้ได้ทั่วระบบ** — ทำงานในแอปที่กำลังโฟกัส ไม่จำกัดเฉพาะหน้าต่าง HotString
-- **จัดการได้ทันที** — เพิ่ม แก้ไข ลบ เปิด/ปิด HotString และการเปลี่ยนแปลงมีผลทันทีโดยไม่ต้องรีสตาร์ต
-- **คำสั่งสามแบบ** — พิมพ์ข้อความ Unicode, รัน PowerShell แบบซ่อนหน้าต่าง หรือเรียกคำสั่งของแอป
-- **คำสั่งตอนเริ่มระบบ** — รัน PowerShell อัตโนมัติเมื่อ HotString เริ่มทำงาน
-- **หน้าจอเริ่มต้นใช้งาน** — แนะนำการใช้งานและสร้างกฎ `;hs` → `aopen` ให้อัตโนมัติ
-- **ถาดระบบ (System tray)** — เปิดหน้าต่าง หยุด/เริ่มการดักฟัง เปิด/ปิดการเริ่มพร้อม Windows และออก
-- **รันได้เพียงอินสแตนซ์เดียว** — เปิด HotString ซ้ำจะเป็นการสั่งให้ตัวที่รันอยู่เปิดหน้าต่างแล้วปิดตัวเอง
-- **พิมพ์ Unicode ได้น่าเชื่อถือ** — ภาษาไทย อีโมจิ และข้อความหลายบรรทัดใช้คลิปบอร์ดในการวาง
-  จึงไม่ขึ้นกับเลย์เอาต์คีย์บอร์ดที่ใช้งานอยู่
-- **บันทึก log แบบหมุนไฟล์** — อยู่ที่ `%APPDATA%\HotString\hotstring.log`
-
----
-
-## สิ่งที่ต้องมี
-
-- Windows 10 หรือ Windows 11
-- Python 3.11 ขึ้นไป
-- [`uv`](https://docs.astral.sh/uv/) สำหรับจัดการแพ็กเกจ
-- Microsoft Edge WebView2 Runtime (มีมาแล้วใน Windows 11 และ Windows 10 ส่วนใหญ่)
-
----
-
-## การติดตั้ง
-
-```bash
-git clone https://github.com/jeeradate/hotstring.git
-cd hotstring
-uv sync
-uv run hotstring
-```
-
-การเปิดครั้งแรกจะแสดงหน้าต้อนรับ ซึ่งอธิบายทริกเกอร์และรูปแบบคำสั่ง พร้อมขอให้สร้าง HotString
-ตัวแรกโดยกรอกค่าไว้ให้แล้ว:
-
-| ช่อง | ค่า |
-| --- | --- |
-| Trigger | `;hs` |
-| Description | Open HotString |
-| Command | `aopen` |
-
-ตัวเลือก **Start HotString when Windows starts** ถูกติ๊กไว้เป็นค่าเริ่มต้น
-
-หลังจากนั้น HotString จะเริ่มทำงานเบื้องหลังพร้อมไอคอนในถาดระบบทุกครั้ง เปิดหน้าต่างได้โดย
-ดับเบิลคลิกไอคอนถาด หรือเลือก **Open HotString**
-
----
-
-## เริ่มต้นอย่างรวดเร็ว
-
-สร้าง HotString เหล่านี้ในหน้าต่างจัดการ แล้วลองพิมพ์ใน Notepad เบราว์เซอร์ หรือแอปอื่น:
-
-| ทริกเกอร์ | คำสั่ง | ผลลัพธ์ |
-| --- | --- | --- |
-| `;em` | `tmyname@example.com` | พิมพ์อีเมลของคุณ |
-| `;np` | `sStart-Process notepad` | เปิด Notepad (ไม่มีหน้าต่าง console) |
-| `;hs` | `aopen` | เปิดหน้าต่างจัดการ HotString |
-| `;th` | `tสวัสดีครับ` | พิมพ์ข้อความภาษาไทย (รองรับ Unicode) |
-
-พิมพ์ทริกเกอร์ แล้ว HotString จะลบมันออกและรันคำสั่งให้
-
----
-
-## รูปแบบคำสั่ง
-
-คำสั่งเป็นข้อความธรรมดา **ตัวอักษรตัวแรก** กำหนดชนิดของคำสั่ง:
-
-| นำหน้า | ชนิด | คำอธิบาย | ตัวอย่าง |
-| --- | --- | --- | --- |
-| `t` | พิมพ์ข้อความ | วางข้อความในแอปที่กำลังโฟกัส | `tHello world` |
-| `s` | PowerShell | รันสคริปต์ PowerShell แบบซ่อนหน้าต่าง | `sStart-Process notepad` |
-| `a` | คำสั่งของแอป | เรียกคำสั่งภายใน (`aopen` เปิดหน้าต่าง UI) | `aopen` |
-| `r` | ตอนเริ่มระบบ | รันสคริปต์ PowerShell เมื่อ HotString เริ่มทำงาน | `rStart-Process notepad` |
-
-ตัวคั่นหนึ่งตัว (ช่องว่างหรือ `:`) หลังตัวนำหน้าจะถูกข้ามไป รูปแบบต่อไปนี้จึงเทียบเท่ากัน:
-
-```text
-tHello
-t Hello
-t:Hello
-```
-
-ใช้ได้เช่นเดียวกันกับ `s`, `a` และ `r` (เช่น `s:Get-Date`) ข้อความหลังตัวนำหน้าจะถูกใช้ตามเดิม
-รวมถึงการขึ้นบรรทัดใหม่
-
-หมายเหตุ:
-
-- `t` รองรับ **Unicode (รวมภาษาไทย) และข้อความหลายบรรทัด** โดย HotString จะเก็บข้อความเดิมใน
-  คลิปบอร์ดชั่วคราว ใส่ข้อความใหม่ ส่ง `Ctrl+V` แล้วคืนค่าคลิปบอร์ดเดิม
-- `s` และ `r` รันคำสั่ง
-  `powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -Command "<script>"`
-  พร้อม `CREATE_NO_WINDOW` บนเธรดแยก โดยบันทึก stdout, stderr และ exit code ลง log
-- คำสั่ง `r` ทำงาน **ครั้งเดียวตอน HotString เริ่มทำงาน** ไม่ใช่ทุกครั้งที่เปิดหน้าต่าง
-- คำสั่งที่ขึ้นต้นด้วยตัวอักษรที่ไม่รู้จักจะถูกปฏิเสธทั้งในหน้าต่างแก้ไขและชั้นฐานข้อมูล
-- ปุ่ม **Test** ในไดอะล็อกเพิ่ม/แก้ไขจะตรวจสอบคำสั่ง สำหรับ `t` จะแสดงตัวอย่างข้อความแทนการพิมพ์
-  ส่วน `s`/`r` จะรันสคริปต์จริง
-
----
-
-## การใช้หน้าต่างจัดการ
-
-- **Search** กรองตามทริกเกอร์ คำอธิบาย หรือคำสั่ง
-- **Add HotString** เปิดหน้าต่างแก้ไขที่ด้านล่างของรายการ
-- ปุ่ม **แก้ไข** (ดินสอ) และ **ลบ** (ถังขยะ พร้อมยืนยัน) อยู่ในทุกแถว
-- **Enabled** กำหนดว่าทริกเกอร์จะทำงานหรือไม่ ทริกเกอร์ที่ปิดอยู่ยังคงอยู่ในรายการ
-- **Settings**:
-  - *Start HotString when Windows starts* — เพิ่ม/ลบคีย์รีจิสทรี `Run`
-  - *Pause listening* — ยังติดตั้ง keyboard hook แต่หยุดจับคู่ทริกเกอร์
-- การปิดหน้าต่างเป็นเพียงการซ่อน UI ตัวดักฟังและไอคอนถาดยังทำงานต่อ
-
-กฎการตรวจสอบในหน้าต่างแก้ไข:
-
-- ทริกเกอร์ยาว 2–8 ตัวอักษร ไม่มีช่องว่าง และไม่ซ้ำกัน (ทริกเกอร์ **แยกตัวพิมพ์เล็ก-ใหญ่**)
-- หากทริกเกอร์หนึ่งเป็นส่วนต่อท้าย (suffix) ของอีกทริกเกอร์ จะมีคำเตือน เพราะตัวที่สั้นกว่าจะทำงานก่อนเสมอ
-- คำสั่งต้องขึ้นต้นด้วย `t`, `s`, `a` หรือ `r` และต้องมีเนื้อหาต่อท้าย
-
-### เมนูถาดระบบ
-
-| รายการ | การทำงาน |
-| --- | --- |
-| Open HotString | เปิดหน้าต่างจัดการ |
-| Pause listening / Resume listening | หยุด/เริ่มจับคู่ทริกเกอร์ (จำค่าถาวร) |
-| Start with Windows | เพิ่ม/ลบคีย์รีจิสทรี (เครื่องหมายถูกแสดงสถานะปัจจุบัน) |
-| Exit | หยุดตัวดักฟัง ไอคอนถาด และโปรแกรม |
-
-รันได้เพียงอินสแตนซ์เดียว การเปิด HotString ครั้งที่สองจะสั่งให้ตัวที่รันอยู่เปิดหน้าต่างแล้วปิดตัวเองทันที
-
----
-
-## เริ่มทำงานพร้อม Windows
-
-HotString ลงทะเบียนตัวเองที่:
-
-```text
-HKCU\Software\Microsoft\Windows\CurrentVersion\Run
-ชื่อค่า: HotString
-```
-
-ค่านี้เรียก `pythonw.exe -m hotstring` (หรือไฟล์ 실행 ที่แพ็กแล้ว) จึงไม่มีหน้าต่าง console ตอนล็อกอิน
-เปิด/ปิดได้จาก **Settings** ใน UI หรือเมนูถาดระบบ และมีผลทันทีโดยไม่ต้องรีสตาร์ต
-
----
-
-## หมายเหตุเรื่องเลย์เอาต์คีย์บอร์ด
-
-การจับคู่ใช้ **ตัวอักษรที่ถูกสร้างจริงตามเลย์เอาต์คีย์บอร์ดที่ใช้งาน** และเปรียบเทียบแบบแยก
-ตัวพิมพ์เล็ก-ใหญ่
-
-- ทริกเกอร์ที่พิมพ์ด้วยเลย์เอาต์อังกฤษจะไม่ตรงกับขณะเปิดเลย์เอาต์ไทย
-- `;EM` และ `;em` เป็นทริกเกอร์คนละตัว
-- Dead key, การประกอบตัวอักษรด้วย IME และอักขระจาก AltGr จะเป็นไปตามเลย์เอาต์ของคุณ
-
-บัฟเฟอร์จะถูกล้างเมื่อกด Enter, Esc, Tab, ปุ่มลูกศร, Home/End, PageUp/PageDown, คลิกเมาส์
-หรือสลับหน้าต่าง เพื่อไม่ให้ตัวอักษรเก่ามาทริกเกอร์โดยไม่ตั้งใจ
-
----
-
-## คำเตือนด้านความปลอดภัย
-
-> **คำสั่ง `s` และ `r` รัน PowerShell ด้วยสิทธิ์ผู้ใช้ Windows ของคุณ**
->
-> HotString ไม่ได้แยกSandbox ลงนาม หรือตรวจสอบคำสั่ง คำสั่งที่เป็นอันตรายหรือประมาทอาจลบไฟล์
-> เปลี่ยนการตั้งค่า ดาวน์โหลดซอฟต์แวร์ หรือขโมยข้อมูลได้ ควรเพิ่มเฉพาะคำสั่งที่คุณเข้าใจและเชื่อถือ
-> เก็บไฟล์ฐานข้อมูลไว้เป็นส่วนตัว และอย่านำ HotString จากแหล่งที่ไม่น่าเชื่อถือมาใช้
-> คำสั่งทำงานด้วยสิทธิ์ปกติของคุณ (ไม่ยกระดับ) จึงไม่สามารถจัดการระบบได้เอง เว้นแต่คุณจะรัน
-> HotString ในฐานะผู้ดูแลระบบ
-
-keyboard hook มองเห็นทุกสิ่งที่คุณพิมพ์ HotString ไม่บันทึกหรือส่งข้อมูลการพิมพ์ออกไป
-มีเพียง 8 ตัวอักษรล่าสุดที่เก็บในหน่วยความจำเพื่อตรวจทริกเกอร์ ฐานข้อมูลและ log อยู่บนเครื่องคุณเท่านั้น
-
----
-
-## ตำแหน่งข้อมูล
-
-| ข้อมูล | ตำแหน่ง |
-| --- | --- |
-| ฐานข้อมูล | `D:\hotbuff\hotstring.db` (สร้างโฟลเดอร์และไฟล์ให้อัตโนมัติ) |
-| Log | `%APPDATA%\HotString\hotstring.log` (หมุนที่ 2 MB เก็บ 3 ชุด) |
-| การตั้งค่า | `%APPDATA%\HotString\settings.json` |
-
-สามารถกำหนดผ่านตัวแปรสภาพแวดล้อมสำหรับการพัฒนา/ทดสอบ:
-`HOTSTRING_DB`, `HOTSTRING_APP_DIR`, `HOTSTRING_SETTINGS`, `HOTSTRING_LOG`
-
----
-
-## การแก้ปัญหา
-
-- **ทริกเกอร์ไม่ทำงาน** ตรวจสอบว่าการดักฟังไม่ได้ถูกหยุด HotString เปิดใช้งานอยู่ ทริกเกอร์ไม่ใช่
-  suffix ของอีกตัว และเลย์เอาต์คีย์บอร์ดตรงกัน หน้าต่างที่ยกระดับสิทธิ์และเกมที่ใช้ raw input
-  บางตัวอาจไม่รับการป้อนแบบจำลอง ควรเปิด HotString ด้วยระดับสิทธิ์เดียวกัน
-- **คำสั่ง `t` ไม่พิมพ์ข้อความ** ตรวจสอบว่าช่องปลายทางรองรับ `Ctrl+V` ระบบจะคืนค่าคลิปบอร์ดที่เป็น
-  ข้อความเดิมหลังวาง แต่เนื้อหาที่ไม่ใช่ข้อความอาจถูกแทนที่
-- **หน้าต่างไม่เปิด** ตรวจสอบว่าติดตั้ง WebView2 แล้ว ดู log ที่
-  `%APPDATA%\HotString\hotstring.log` หรือเปิดโฟลเดอร์ log ได้จากเมนูถาด
-- **PowerShell ผิดพลาด** เปิด log เพื่อดู stdout, stderr และ exit code และลองรันสคริปต์เดิมด้วย
-  `powershell.exe -NoProfile -Command "<script>"`
-- **ดูเหมือนมีสองอินสแตนซ์** อนุญาตให้มีตัวทำงานเบื้องหลังเพียงตัวเดียว การเปิดครั้งที่สองจะสั่งให้
-  ตัวแรกเปิดหน้าต่าง
-
----
-
-## โครงสร้างโปรเจกต์
-
-```text
-hotstring/
-├── pyproject.toml
-├── uv.lock
-├── README.md
-├── LICENSE
-├── .gitignore
-├── src/hotstring/
-│   ├── __init__.py
-│   ├── __main__.py      # uv run hotstring / python -m hotstring
-│   ├── app.py           # การเริ่มทำงาน, single instance, จัดการโปรเซส
-│   ├── models.py        # โมเดล SQLModel และตัวช่วยตรวจสอบ
-│   ├── db.py            # engine, session, CRUD
-│   ├── listener.py      # global keyboard hook และบัฟเฟอร์ตัวอักษร
-│   ├── executor.py      # แยกวิเคราะห์และรัน t / s / a / r
-│   ├── ui.py            # หน้า NiceGUI, ไดอะล็อก, การตั้งค่า
-│   ├── tray.py          # ไอคอนและเมนูถาดระบบ
-│   ├── autostart.py     # คีย์รีจิสทรี Run
-│   ├── signals.py       # Windows named events ระหว่างโปรเซส
-│   └── config.py        # พาธ ค่าคงที่ การตั้งค่า และ logging
-└── tests/
-    ├── test_models.py
-    ├── test_matching.py
-    └── test_executor.py
-```
-
----
-
-## การพัฒนา
-
-```bash
-uv sync                 # สร้าง environment และติดตั้ง dependencies
-uv run pytest           # รันชุดทดสอบ
-uv run hotstring        # เริ่มโปรแกรม
-```
-
-หากต้องการทดสอบ UI โดยไม่เปิดหน้าต่าง native ให้ตั้งค่า `HOTSTRING_NO_NATIVE=1`
-ระบบจะแสดง UI ผ่านเบราว์เซอร์แทน pywebview
-
----
-
-## ข้อจำกัดที่ทราบ
-
-- รองรับเฉพาะ Windows (รีจิสทรี autostart, keyboard hook ของ `pynput`, คลิปบอร์ด Win32)
-- ทริกเกอร์จำกัด 8 ตัวอักษร และจับคู่แบบแยกตัวพิมพ์เล็ก-ใหญ่ตามเลย์เอาต์คีย์บอร์ด
-- การพิมพ์ใช้การวางจากคลิปบอร์ด เครื่องมือ clipboard history อาจบันทึกข้อความที่วาง และเนื้อหา
-  คลิปบอร์ดที่ไม่ใช่ข้อความจะไม่ถูกคืนค่า
-- เอาต์พุต PowerShell ถูกถอดรหัสเป็น UTF-8 สคริปต์ที่ส่งข้อความด้วย OEM code page อาจแสดง
-  ตัวอักษรทดแทนใน log
-- แอปที่ยกระดับสิทธิ์อาจไม่รับการป้อนแบบจำลอง เว้นแต่ HotString จะยกระดับสิทธิ์ด้วย
-
----
-
-## สัญญาอนุญาต
-
-MIT — ดู [LICENSE](LICENSE)

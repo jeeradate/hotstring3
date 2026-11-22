@@ -121,7 +121,7 @@ class SignalHub:
             self._handles[WAIT_OBJECT_0 + index] = (name, handle)
             self._callbacks[WAIT_OBJECT_0 + index] = callback
 
-        self._thread = threading.Thread(target=self._loop, name="hotstring-signals", daemon=True)
+        self._thread = threading.Thread(target=self._loop, name="hotstring3-signals", daemon=True)
         self._thread.start()
 
     def _loop(self) -> None:

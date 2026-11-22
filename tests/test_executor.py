@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import pytest
 
-from hotstring.executor import (
+from hotstring3.executor import (
     CommandExecutor,
     ParsedCommand,
     parse_command,
     powershell_argv,
     validate_command,
 )
+from hotstring3.powershell import PowerShellInfo
 
 
 # ---------------------------------------------------------------------------
@@ -77,6 +78,21 @@ def test_powershell_argv_contains_required_flags() -> None:
     assert "-WindowStyle" in argv and "Hidden" in argv
     assert "-ExecutionPolicy" in argv and "Bypass" in argv
     assert argv[-2:] == ["-Command", "Get-Date"]
+
+
+def test_powershell_argv_accepts_detected_executable() -> None:
+    argv = powershell_argv("Get-Date", r"C:\Program Files\PowerShell\7\pwsh.exe")
+    assert argv[0].endswith("pwsh.exe")
+
+
+def test_powershell_status_text_matches_ui_format() -> None:
+    assert PowerShellInfo(r"C:\PowerShell\7\pwsh.exe", "7.4.2").status_text() == (
+        "PowerShell: 7.4.2 (pwsh)"
+    )
+    assert PowerShellInfo("powershell.exe", "5.1.22621.1").status_text() == (
+        "PowerShell: 5.1.22621.1"
+    )
+    assert PowerShellInfo("powershell.exe", "").status_text() == "PowerShell: not detected"
 
 
 # ---------------------------------------------------------------------------

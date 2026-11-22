@@ -1,4 +1,4 @@
-"""Console entry point: ``uv run hotstring`` / ``python -m hotstring``."""
+"""Console entry point: ``uv run hotstring3`` / ``python -m hotstring3``."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from typing import Sequence
 def main(argv: Sequence[str] | None = None) -> int:
     """Parse arguments and start either the background app or the UI window."""
     parser = argparse.ArgumentParser(
-        prog="hotstring",
-        description="HotString — type a short trigger anywhere on Windows to run a command.",
+        prog="hotstring3",
+        description="HotString3 — type a short trigger anywhere on Windows to run a command.",
     )
     parser.add_argument(
         "--ui",
