@@ -21,7 +21,7 @@ import threading
 from ctypes import wintypes
 from typing import Any
 
-from .suggestions import SuggestionState, TriggerSuggestion
+from .suggestions import SuggestionState, TriggerCategory, TriggerSuggestion
 
 log = logging.getLogger(__name__)
 
@@ -47,8 +47,12 @@ _HEADER_FG = "#475569"
 _TRIGGER_FG = "#1d4ed8"
 _DESC_FG = "#334155"
 
-_WIDTH = 380
-_LIMIT = 6
+#: Popup geometry.  Long lists flow into extra columns instead of being cut off.
+_MIN_WIDTH = 380
+_COLUMN_WIDTH = 320
+_MAX_ROWS_PER_COLUMN = 16
+_MAX_COLUMNS = 5
+_DESCRIPTION_LIMIT = 60
 
 
 if _IS_WINDOWS:  # pragma: no cover - exercised by the desktop smoke test
@@ -221,7 +225,7 @@ class SuggestionPopup:
     # -- public API ---------------------------------------------------------
     def show(self, state: SuggestionState) -> None:
         """Render ``state`` (or update the existing popup)."""
-        if self._closed or self._unavailable or not state.items:
+        if self._closed or self._unavailable or (not state.items and not state.categories):
             return
         self._ensure_thread()
         if self._thread is not None:
@@ -349,24 +353,55 @@ class SuggestionPopup:
             pass
 
     def _render(self, state: SuggestionState) -> None:  # pragma: no cover - Tk thread
+        """Render stage 1 (categories) or stage 2 (trigger + description).
+
+        Nothing is clipped: when the entries do not fit in one column the
+        popup grows additional columns, up to :data:`_MAX_COLUMNS`.
+        """
         root = self._root
         if root is None:
             return
+
+        import tkinter as tk
 
         assert self._rows is not None and self._header is not None
         for child in self._rows.winfo_children():
             child.destroy()
 
-        self._header.configure(text=f'Suggestions for "{state.prefix}"')
-        items = list(state.items[:_LIMIT])
-        for item in items:
-            self._add_row(item)
+        is_categories = state.is_category_stage
+        if is_categories:
+            self._header.configure(text=f'HotStrings starting with "{state.prefix}"')
+        else:
+            self._header.configure(text=f'Suggestions for "{state.prefix}"')
 
+        total = len(state.categories) if is_categories else len(state.items)
+        per_column = min(_MAX_ROWS_PER_COLUMN, max(1, total))
+        columns = -(-total // per_column)
+        while columns > _MAX_COLUMNS:
+            per_column += 1
+            columns = -(-total // per_column)
+
+        grid = tk.Frame(self._rows, bg=_BG)
+        grid.pack(fill="both", expand=True)
+        for index in range(columns):
+            start = index * per_column
+            if index:
+                tk.Frame(grid, bg=_BORDER, width=1).pack(side="left", fill="y")
+            column = tk.Frame(grid, bg=_BG)
+            column.pack(side="left", anchor="n", fill="y")
+            if is_categories:
+                for category in state.categories[start : start + per_column]:
+                    self._add_category_row(column, category)
+            else:
+                for item in state.items[start : start + per_column]:
+                    self._add_item_row(column, item)
+
+        width = max(_MIN_WIDTH, columns * _COLUMN_WIDTH)
         root.update_idletasks()
         height = max(60, int(root.winfo_reqheight()))
         x, y = _caret_point()
-        x, y = _clamp_position(x, y, _WIDTH, height)
-        root.geometry(f"{_WIDTH}x{height}+{x}+{y}")
+        x, y = _clamp_position(x, y, width, height)
+        root.geometry(f"{width}x{height}+{x}+{y}")
         root.update_idletasks()
 
         if not self._visible:
@@ -375,13 +410,15 @@ class SuggestionPopup:
                 root.deiconify()
             except Exception:  # noqa: BLE001
                 pass
-        _place_window(self._hwnd, x, y, _WIDTH, height)
+        _place_window(self._hwnd, x, y, width, height)
 
-    def _add_row(self, item: TriggerSuggestion) -> None:  # pragma: no cover - Tk thread
+    def _add_item_row(
+        self, parent: Any, item: TriggerSuggestion
+    ) -> None:  # pragma: no cover - Tk thread
+        """Add one stage-2 row: the trigger and its description only."""
         import tkinter as tk
 
-        assert self._rows is not None
-        row = tk.Frame(self._rows, bg=_BG, padx=12, pady=7)
+        row = tk.Frame(parent, bg=_BG, padx=12, pady=7)
         row.pack(fill="x")
 
         trigger = tk.Label(
@@ -396,13 +433,42 @@ class SuggestionPopup:
         trigger.pack(side="left")
         description = tk.Label(
             row,
-            text=_truncate(item.subtitle),
+            text=_truncate(item.display_description, _DESCRIPTION_LIMIT),
             bg=_BG,
             fg=_DESC_FG,
             font=("Segoe UI", 10),
             anchor="w",
         )
         description.pack(side="left", fill="x", expand=True)
+
+    def _add_category_row(
+        self, parent: Any, category: TriggerCategory
+    ) -> None:  # pragma: no cover - Tk thread
+        """Add one stage-1 row: a second-character prefix and its rule count."""
+        import tkinter as tk
+
+        row = tk.Frame(parent, bg=_BG, padx=12, pady=7)
+        row.pack(fill="x")
+
+        prefix = tk.Label(
+            row,
+            text=category.prefix,
+            bg=_BG,
+            fg=_TRIGGER_FG,
+            font=("Consolas", 10, "bold"),
+            width=4,
+            anchor="w",
+        )
+        prefix.pack(side="left")
+        count = tk.Label(
+            row,
+            text=f"{category.count} rule{'s' if category.count != 1 else ''}",
+            bg=_BG,
+            fg=_DESC_FG,
+            font=("Segoe UI", 9),
+            anchor="w",
+        )
+        count.pack(side="left", fill="x", expand=True)
 
     def _hide(self) -> None:  # pragma: no cover - Tk thread
         if not self._visible or self._root is None:

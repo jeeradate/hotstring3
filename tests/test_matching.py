@@ -218,7 +218,10 @@ def test_listener_publishes_two_character_suggestions(monkeypatch) -> None:
     )
 
     listener._on_press(typed(";"))
-    assert states[-1] is None  # one character is not enough to suggest anything
+    # A lone ";" opens stage 1: the list of second-character categories.
+    assert states[-1] is not None
+    assert states[-1].is_category_stage
+    assert states[-1].categories[0].prefix == ";e"
 
     listener._on_press(typed("e"))
     assert states[-1] is not None
@@ -262,10 +265,12 @@ def test_listener_updates_suggestions_on_backspace_and_dismiss(monkeypatch) -> N
     assert states[-1] is not None
 
     listener._on_press(Key.backspace)
-    assert states[-1] is None
+    assert states[-1] is not None
+    assert states[-1].is_category_stage
 
     listener._on_press(typed("e"))
     assert states[-1] is not None
+    assert [item.trigger for item in states[-1].items] == [";em"]
     listener._on_press(Key.esc)
     assert states[-1] is None
     assert listener.buffer.text == ""

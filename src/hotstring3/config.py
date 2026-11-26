@@ -85,8 +85,9 @@ BUFFER_SIZE = 8
 #: Suggestions appear once the typed prefix reaches this many characters.
 SUGGESTION_MIN_PREFIX = MIN_TRIGGER_LENGTH
 
-#: Maximum number of suggestions shown in the popup at once.
-SUGGESTION_LIMIT = 6
+#: Safety cap on suggestions collected for the popup.  It is intentionally high
+#: so every matching trigger is shown; the popup flows long lists into columns.
+SUGGESTION_LIMIT = 100
 
 #: Valid first characters of a Command.
 COMMAND_PREFIXES: dict[str, str] = {

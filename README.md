@@ -21,8 +21,9 @@ Built with Python, [NiceGUI](https://nicegui.io/) (native pywebview window), SQL
 - **Global triggers** — works in any focused application, not just the HotString3 window.
 - **Instant management** — add, edit, delete, enable or disable HotStrings; changes apply
   immediately, no restart.
-- **Trigger suggestions** — after two characters, a non-activating popup lists matching triggers
-  and descriptions while you keep typing.
+- **Trigger suggestions** — typing `;` shows every available second character, and from two
+  characters on a non-activating popup lists matching triggers with their descriptions while you
+  keep typing.
 - **Three command types** — type Unicode text, run hidden PowerShell, or trigger an app action.
 - **Startup commands** — run PowerShell automatically when HotString3 starts.
 - **First-run onboarding** — a guided screen creates the `;hs` → `aopen` rule for you.
@@ -98,16 +99,23 @@ Create these HotStrings in the UI, then try them in Notepad, your browser, or an
 | `;hs` | `aopen` | Opens the HotString3 management window |
 | `;th` | `tสวัสดีครับ` | Types Thai text (Unicode-safe) |
 
-Type the trigger, and HotString3 removes it and runs the command. After you have typed the first
-**two** characters of a trigger, a popup also shows the matching triggers and their descriptions.
+Type the trigger, and HotString3 removes it and runs the command. A popup also appears while you
+type: `;` shows the available second characters, and from the first **two** characters it lists
+the matching triggers and their descriptions.
 
 ---
 
 ## Trigger suggestions
 
 As you type in any application, HotString3 checks whether the most recent characters are the start
-of an enabled trigger. Once that prefix is at least two characters long (for example `;e`), a small
-popup appears with every matching trigger and its description:
+of an enabled trigger. The popup has two stages:
+
+1. **`;` (one character)** — every distinct second character found in the enabled triggers is
+   listed once (`;a`, `;p`, `;g`, …) with how many rules use it, so you can see all available
+   groups at a glance.
+2. **`;e` (two or more characters)** — every trigger starting with those characters is shown with
+   its **trigger and description only**; the command/expansion text is never displayed in the
+   popup, and longer prefixes narrow the list.
 
 ![Trigger suggestion popup](docs/screenshots/suggestions.png)
 
@@ -115,6 +123,8 @@ The popup is designed to stay out of the way:
 
 - It **never takes keyboard focus** — typing continues in the application underneath.
 - It **filters as you type**: `;e` shows `;em`, `;email` and `;en`; `;ema` narrows the list.
+- It **never truncates the list**: when the entries do not fit in one column, the popup grows
+  additional columns (up to five), each holding the matching triggers or categories.
 - It follows the text caret (falling back to the mouse pointer) and stays on the current monitor,
   flipping above the line near the bottom of the screen.
 - It **dismisses automatically** when the trigger fires, the prefix stops matching, or you press
@@ -340,8 +350,8 @@ triggers up immediately; the management UI does this for you.
   trigger is not a suffix of another trigger, and the keyboard layout matches. Some elevated
   windows and games using raw input do not accept synthetic input; run HotString3 at the same
   privilege level if needed.
-- **The suggestion popup does not appear.** It needs at least two typed characters that prefix an
-  enabled trigger, and listening must not be paused. Cases where the target app does not expose a
+- **The suggestion popup does not appear.** It needs a typed `;` (or another non-alphanumeric
+  leading character) that starts an enabled trigger, and listening must not be paused. Cases where the target app does not expose a
   caret position still get a popup near the mouse pointer. Full-screen exclusive games may draw
   over it; triggers themselves continue to work.
 - **Nothing is typed for a `t` command.** Make sure the target control accepts `Ctrl+V`. The
