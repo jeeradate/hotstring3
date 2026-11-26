@@ -226,7 +226,8 @@ class HotString3Application:
         if self._ui_process is not None and self._ui_process.poll() is None:
             return
 
-        argv = [sys.executable, "-m", "hotstring3", "--ui"]
+        frozen = bool(getattr(sys, "frozen", False))
+        argv = [sys.executable, "--ui"] if frozen else [sys.executable, "-m", "hotstring3", "--ui"]
         if onboarding:
             argv.append("--onboarding")
 
@@ -244,9 +245,13 @@ class HotString3Application:
                 stderr=subprocess.DEVNULL,
                 creationflags=creationflags,
                 env=env,
-                cwd=str(Path(__file__).resolve().parents[2])
-                if (Path(__file__).resolve().parents[2] / "pyproject.toml").exists()
-                else None,
+                cwd=None
+                if frozen
+                else (
+                    str(Path(__file__).resolve().parents[2])
+                    if (Path(__file__).resolve().parents[2] / "pyproject.toml").exists()
+                    else None
+                ),
             )
             log.info("Opened UI process (pid %s)", self._ui_process.pid)
         except OSError as exc:

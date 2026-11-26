@@ -18,8 +18,15 @@ APP_VERSION = "1.0.0"
 #: existing data, so renaming the project never silently loses a database.
 LEGACY_APP_NAME = "HotString"
 
+def _bundle_root() -> Path:
+    """Return the repository root, or the temporary bundle folder when frozen."""
+    if getattr(sys, "frozen", False):
+        return Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent))
+    return Path(__file__).resolve().parents[2]
+
+
 #: Repository root (``pyproject.toml`` lives here) and the bundled icon folder.
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = _bundle_root()
 ASSETS_DIR = PROJECT_ROOT / "assets"
 
 
